@@ -33,20 +33,40 @@ jobs:
         shell: pwsh
         run: dotnet restore PCLCS\PCLCS.csproj
 
+      # 旧式 VB 工程不会自动编译它引用的 SDK 式 C# 工程，必须先把 C# 工程编译出 DLL，
+      # 否则 VB 编译时找不到 PCLCS / MeloongCore 的引用程序集
+      - name: 编译 C# 工程
+        shell: pwsh
+        run: |
+          dotnet build PCLCS\PCLCS.csproj -c ${{ matrix.configuration }} -v:minimal
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: 编译
         shell: pwsh
-        run: msbuild "Plain Craft Launcher 2\Plain Craft Launcher 2.vbproj" -p:Configuration=${{ matrix.configuration }} -m -verbosity:minimal
+        run: |
+          $log = "${{ runner.temp }}\msbuild.log"
+          msbuild "Plain Craft Launcher 2\Plain Craft Launcher 2.vbproj" `
+            -p:Configuration=${{ matrix.configuration }} -m -verbosity:normal `
+            "-fileLogger" "-fileLoggerParameters:LogFile=$log;Verbosity=normal;Encoding=UTF-8"
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            Write-Host "===== 编译错误 ====="
+            Select-String -Path $log -Pattern ": error |: fatal error " | Select-Object -First 60 | ForEach-Object { Write-Host $_.Line }
+            Write-Host "===== 尾部日志 ====="
+            Get-Content $log -Tail 40
+          }
+          exit $code
 
       - name: 检查编译产物
         shell: pwsh
         run: |
+          Get-ChildItem "Plain Craft Launcher 2\bin" -ErrorAction SilentlyContinue | Select-Object Name, Length | Format-Table -AutoSize
           $exe = "Plain Craft Launcher 2\bin\Plain Craft Launcher 2.exe"
           if (-not (Test-Path $exe)) {
             Write-Error "未找到编译产物：$exe"
             exit 1
           }
           Write-Host "编译成功：$exe"
-          Get-ChildItem "Plain Craft Launcher 2\bin" | Select-Object Name, Length | Format-Table -AutoSize
 
       - name: 上传编译产物
         if: matrix.configuration == 'Release'
