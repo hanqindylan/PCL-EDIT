@@ -443,6 +443,7 @@ Public Class FormMain
                 DlClientListMojangLoader.Start(1) 'PCL 会同时根据这里的加载结果决定是否使用官方源进行下载
                 RunCountSub()
                 ServerLoader.Start()
+                UpdateCheckAuto() 'PCL-EDIT 自动检查更新（#9553）
                 RunInNewThread(AddressOf TryClearTaskTemp, "TryClearTaskTemp", ThreadPriority.BelowNormal)
             Catch ex As Exception
                 Logger.Error(ex, "初始化加载池运行失败")
@@ -457,7 +458,7 @@ Public Class FormMain
             Telemetry("启动")
             '开源版本提示
             If VersionBranchMain = "OpenSource" Then
-                MyMsgBox($"该版本中无法使用以下特性：{vbCrLf}- CurseForge API 调用：需要自行申请 API Key，然后添加到 ModSecret.vb 的开头{vbCrLf}- 正版登录：需要自行向微软申请 Client ID，然后添加到 ModSecret.vb 的开头{vbCrLf}- 更新与联网通知：避免滥用隐患{vbCrLf}- 主题切换：这是需要赞助解锁的纪念性质的功能，别让赞助者太伤心啦……{vbCrLf}- 百宝箱：开发早期往里面塞了些开发工具，整理起来太麻烦了……", "开源版本说明")
+                MyMsgBox($"该版本中无法使用以下特性：{vbCrLf}- CurseForge API 调用：需要自行申请 API Key，然后添加到 ModSecret.vb 的开头{vbCrLf}- 正版登录：需要自行向微软申请 Client ID，然后添加到 ModSecret.vb 的开头{vbCrLf}- 联网通知与官方配置获取：避免滥用隐患{vbCrLf}- 主题切换：这是需要赞助解锁的纪念性质的功能，别让赞助者太伤心啦……{vbCrLf}- 百宝箱：开发早期往里面塞了些开发工具，整理起来太麻烦了……", "开源版本说明")
             End If
         End Sub, "初始化", ThreadPriority.Lowest)
 
@@ -945,6 +946,9 @@ Public Class FormMain
                 If Files IsNot Nothing AndAlso Files.Length > 0 Then
                     e.Effects = DragDropEffects.Link
                 End If
+            ElseIf HasVirtualFileDrop(e.Data) Then
+                'IntelliJ IDEA 等程序拖出的是虚拟文件，没有真实路径（#9331）
+                e.Effects = DragDropEffects.Copy
             End If
             PrevData = e.Data
             PrevEffects = e.Effects
@@ -1026,11 +1030,119 @@ Public Class FormMain
                 e.Handled = True
                 e.Effects = DragDropEffects.Link
                 FileDrag(CType(FilePathRaw, IEnumerable(Of String)))
+            ElseIf HasVirtualFileDrop(e.Data) Then
+                '虚拟文件拖放（例如从 IntelliJ IDEA 的项目视图拖出编译产物）（#9331）
+                '这类拖放不提供磁盘路径，只能读取文件名与文件内容，因此先落到临时目录再按普通文件处理
+                Dim VirtualFiles = MaterializeVirtualFiles(e.Data)
+                If Not VirtualFiles.Any Then
+                    Hint("无法读取拖入的虚拟文件！", HintType.Red)
+                    Return
+                End If
+                e.Handled = True
+                e.Effects = DragDropEffects.Copy
+                FileDrag(VirtualFiles)
             End If
         Catch ex As Exception
             Logger.Error(ex, "接取拖拽事件失败")
         End Try
     End Sub
+    ''' <summary>
+    ''' 判断拖放数据是否为虚拟文件（FileGroupDescriptor + FileContents）。
+    ''' IntelliJ IDEA 从项目视图拖出的文件就属于这种，普通的 FileDrop 格式拿不到它（#9331）。
+    ''' </summary>
+    Private Shared Function HasVirtualFileDrop(Data As IDataObject) As Boolean
+        Return Data.GetDataPresent("FileGroupDescriptorW") AndAlso Data.GetDataPresent("FileContents")
+    End Function
+    ''' <summary>
+    ''' 将虚拟文件的内容写入临时目录，返回落盘后的路径。
+    ''' WPF 的 IDataObject 无法按索引读取 FileContents，必须改用 COM 的 IDataObject。
+    ''' </summary>
+    Private Shared Function MaterializeVirtualFiles(Data As IDataObject) As List(Of String)
+        Dim Result As New List(Of String)
+        Dim DescriptorPtr As IntPtr = IntPtr.Zero
+        Try
+            Dim Descriptor = TryCast(Data.GetData("FileGroupDescriptorW"), Stream)
+            If Descriptor Is Nothing Then Return Result
+            Dim ComData = TryCast(Data, Runtime.InteropServices.ComTypes.IDataObject)
+            If ComData Is Nothing Then Return Result
+            Dim DescriptorBytes As Byte()
+            Using Reader As New BinaryReader(Descriptor)
+                DescriptorBytes = Reader.ReadBytes(CInt(Descriptor.Length))
+            End Using
+            Dim Count = BitConverter.ToInt32(DescriptorBytes, 0)
+            Const DescriptorSize = 592 'FILEDESCRIPTORW 的大小
+            For Index = 0 To Count - 1
+                Dim NameOffset = 4 + Index * DescriptorSize + 72
+                If NameOffset + 520 > DescriptorBytes.Length Then Exit For
+                Dim FileName = Text.Encoding.Unicode.GetString(DescriptorBytes, NameOffset, 520).TrimEnd(ChrW(0))
+                FileName = PathUtils.GetFileName(FileName.Replace("/", "\")) '描述符中可能带有相对路径
+                If String.IsNullOrWhiteSpace(FileName) Then Continue For
+                '按索引取出第 Index 个文件的内容
+                Dim Format As New Runtime.InteropServices.ComTypes.FORMATETC With {
+                    .cfFormat = CShort(DataFormats.GetDataFormat("FileContents").Id),
+                    .dwAspect = Runtime.InteropServices.ComTypes.DVASPECT.DVASPECT_CONTENT,
+                    .lindex = Index,
+                    .tymed = Runtime.InteropServices.ComTypes.TYMED.TYMED_ISTREAM Or Runtime.InteropServices.ComTypes.TYMED.TYMED_HGLOBAL
+                }
+                Dim Medium As New Runtime.InteropServices.ComTypes.STGMEDIUM
+                ComData.GetData(Format, Medium)
+                Using Content = ReadVirtualFileMedium(Medium)
+                    If Content Is Nothing Then Continue For
+                    Dim Target = RequestTaskTempFolder() & FileName
+                    File.WriteAllBytes(Target, Content.ToArray())
+                    Result.Add(Target)
+                    Logger.Info($"已接收虚拟文件拖放：{FileName}")
+                End Using
+            Next
+        Catch ex As Exception
+            Logger.Warn(ex, "读取虚拟文件拖放失败")
+        Finally
+            If DescriptorPtr <> IntPtr.Zero Then Runtime.InteropServices.Marshal.FreeHGlobal(DescriptorPtr)
+        End Try
+        Return Result
+    End Function
+    ''' <summary>
+    ''' 从 COM 拖放介质中读出文件内容。
+    ''' </summary>
+    Private Shared Function ReadVirtualFileMedium(Medium As Runtime.InteropServices.ComTypes.STGMEDIUM) As MemoryStream
+        Try
+            If Medium.tymed = Runtime.InteropServices.ComTypes.TYMED.TYMED_ISTREAM Then
+                Dim Stream = TryCast(Runtime.InteropServices.Marshal.GetObjectForIUnknown(Medium.unionmember), Runtime.InteropServices.ComTypes.IStream)
+                If Stream Is Nothing Then Return Nothing
+                Dim Result As New MemoryStream
+                Dim Buffer(8191) As Byte
+                Dim Read As IntPtr = Runtime.InteropServices.Marshal.AllocHGlobal(4)
+                Try
+                    Do
+                        Stream.Read(Buffer, Buffer.Length, Read)
+                        Dim Count = Runtime.InteropServices.Marshal.ReadInt32(Read)
+                        If Count <= 0 Then Exit Do
+                        Result.Write(Buffer, 0, Count)
+                    Loop
+                Finally
+                    Runtime.InteropServices.Marshal.FreeHGlobal(Read)
+                End Try
+                Return Result
+            ElseIf Medium.tymed = Runtime.InteropServices.ComTypes.TYMED.TYMED_HGLOBAL Then
+                Dim Size = CInt(GlobalSize(Medium.unionmember))
+                Dim Result As New MemoryStream
+                Dim Buffer(Size - 1) As Byte
+                Runtime.InteropServices.Marshal.Copy(Medium.unionmember, Buffer, 0, Size)
+                Result.Write(Buffer, 0, Size)
+                Return Result
+            End If
+            Return Nothing
+        Finally
+            ReleaseStgMedium(Medium)
+        End Try
+    End Function
+    <Runtime.InteropServices.DllImport("kernel32.dll")>
+    Private Shared Function GlobalSize(hMem As IntPtr) As IntPtr
+    End Function
+    <Runtime.InteropServices.DllImport("ole32.dll")>
+    Private Shared Sub ReleaseStgMedium(ByRef medium As Runtime.InteropServices.ComTypes.STGMEDIUM)
+    End Sub
+
     Private Sub FileDrag(FilePathList As IEnumerable(Of String))
         RunInNewThread(
         Sub()

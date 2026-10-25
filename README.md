@@ -1,17 +1,79 @@
-# Plain Craft Launcher
+# PCL-EDIT
 
-[![Stars](https://img.shields.io/github/stars/Meloong-Git/PCL?style=flat&logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZlcnNpb249IjEiIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiI+PHBhdGggZD0iTTggLjI1YS43NS43NSAwIDAgMSAuNjczLjQxOGwxLjg4MiAzLjgxNSA0LjIxLjYxMmEuNzUuNzUgMCAwIDEgLjQxNiAxLjI3OWwtMy4wNDYgMi45Ny43MTkgNC4xOTJhLjc1MS43NTEgMCAwIDEtMS4wODguNzkxTDggMTIuMzQ3bC0zLjc2NiAxLjk4YS43NS43NSAwIDAgMS0xLjA4OC0uNzlsLjcyLTQuMTk0TC44MTggNi4zNzRhLjc1Ljc1IDAgMCAxIC40MTYtMS4yOGw0LjIxLS42MTFMNy4zMjcuNjY4QS43NS43NSAwIDAgMSA4IC4yNVoiIGZpbGw9IiNlYWM1NGYiLz48L3N2Zz4=&logoSize=auto&label=Stars&labelColor=444444&color=eac54f)](https://github.com/Meloong-Git/PCL/)
-[![Issues](https://img.shields.io/github/issues/Meloong-Git/PCL?style=flat&label=Issues&labelColor=444444&color=1F883D)](https://github.com/Meloong-Git/PCL/issues)
-[![哔哩哔哩](https://img.shields.io/badge/动态-BiliBili-00A4DB?style=flat&labelColor=444444&logoSize=auto)](https://space.bilibili.com/11343203/dynamic)
-[![爱发电](https://img.shields.io/badge/赞助-爱发电-946ce6?style=flat&labelColor=444444&logoSize=auto)](https://meloong.com/afd/a/LTCat)
+[![Build](https://github.com/hanqindylan/PCL-EDIT/actions/workflows/build.yml/badge.svg)](https://github.com/hanqindylan/PCL-EDIT/actions/workflows/build.yml)
+[![Release](https://img.shields.io/github/v/release/hanqindylan/PCL-EDIT?label=Release&labelColor=444444&color=1F883D)](https://github.com/hanqindylan/PCL-EDIT/releases)
 
-包含 PCL 的大部分源代码，包括 UI 库、动画模块、下载模块、Minecraft 启动模块等！<br/>
-代码并不是实时更新的，它会在每次 PCL 发布更新时同步一次。<br/>
-非常感谢社区的大力支持！
+PCL-EDIT 是 [Plain Craft Launcher 2](https://github.com/Meloong-Git/PCL) 的第三方修改版，基于上游 `2.99.0.1`，当前版本 **3.0.0**。
 
-<br/>
+本版本恢复了启动器内的 Minecraft 下载功能，并修复了上游截至 `2.99.0.1` 仍开放的一批问题。协议见仓库根目录的 `LICENCE`：原文保持不变，文末新增《PCL-EDIT 附加说明》。
 
-### 相关资源
-- [PCL 下载](https://meloong.com/pcl)：下载可免费使用的正式版 PCL！
-- [PCL 功能投票](https://github.com/Meloong-Git/PCL/discussions/2)：来参加投票吧，开发者会优先处理票数较高的项目！
-- [帮助文档库](https://github.com/LTCatt/PCL2Help)：PCL 内置帮助文档的存储库
+## 下载
+
+- 发布页：<https://github.com/hanqindylan/PCL-EDIT/releases>
+- 最新正式版：`3.0.0`
+- 每次推送到 `main` 后，GitHub Actions 会在 Windows 上编译 Release 与 Snapshot，Release 产物可在对应的 Actions 运行中下载。
+
+下载后解压即可使用。程序只支持 Windows，需要 [.NET Framework 4.8](https://dotnet.microsoft.com/download/dotnet-framework/net48)。
+
+## 本版本做了什么
+
+### 下载
+
+- 恢复游戏本体、Mod 加载器、整合包和社区资源的下载入口。
+- 修复启动器更新检查失效（[#9553](https://github.com/Meloong-Git/PCL/issues/9553)）：更新源改为本仓库的 GitHub Release，不再依赖已经失效的上游更新接口。
+
+### 已修复的上游问题
+
+| 编号 | 问题 | 处理 |
+| --- | --- | --- |
+| #9553 | 启动器更新功能失效 | 改用本仓库 Release 作为更新源 |
+| #9536 | 资源下载导向错误的版本文件夹 | 缓存键加入资源类型、加载器与 MC 版本 |
+| #9501 | 低版本窗口标题为空时启动状态无法结束 | 放行 LWJGL 空标题窗口，窗口出现后立即更新进度 |
+| #9499 | 扫描版本时单个损坏文件导致整个列表失败 | 单个文件解析失败时跳过并继续扫描 |
+| #9495 | 启动日志底部多出一个空白行 | 换行只作为行间分隔 |
+| #9482 | OptiFine 抗锯齿重建窗口后自定义标题失效 | 窗口被重建后重新获取句柄 |
+| #9448 | 全透明皮肤在游戏内显示为黑色 | 选择皮肤时提前警告 |
+| #9440 | 加载器状态并发修改导致异常 | 状态变更加锁 |
+| #9426 | 按 MC 版本搜索 Mod 时列出该版本不支持的加载器 | 按该版本的实际文件核对加载器 |
+| #9416 | 披风名称未翻译 | 补充 Hero、Twisted 的中文名 |
+| #9412 | 整合包安装时文件名丢失 | 保留原始文件名 |
+| #9404 | 部分版本不支持自定义分辨率参数 | 启动前判断该版本是否支持 |
+| #9374 | 整合包显示名称错误 | 使用整合包声明的显示名称 |
+| #9371 | SAC 阻止启动时没有解决办法 | 常见问题新增 Smart Application Control 条目 |
+| #9370 | 管理员权限下拖入长路径文件失败 | 按实际长度分配拖放缓冲区 |
+| #9369 | 首次进入任务管理页会被立刻弹回 | 仍有任务时不再自动返回 |
+| #9360 | 同时更新相同 Mod 时替换失败 | 每个更新任务使用独立临时目录 |
+| #9345 | 部分刷新按钮没有反馈 | 补齐刷新提示 |
+| #9343 | 刚打开时主页的玩家名和版本标记为空 | 等登录与版本列表完成后再替换 |
+| #9331 | 无法从 IntelliJ IDEA 拖入 Mod | 支持虚拟文件拖放 |
+| #9325 | 超长错误日志导致提示框卡顿 | 弹窗只显示开头一段，完整内容可另开查看 |
+| #9303 | Wiki 条目热度分组错位 | 修正条目换行与分组 |
+
+## 编译
+
+本机需要 Windows、Visual Studio 2022（含 .NET Framework 4.8 目标包）和 MSBuild。
+
+```powershell
+git clone --recurse-submodules https://github.com/hanqindylan/PCL-EDIT.git
+cd PCL-EDIT
+dotnet restore PCLCS\PCLCS.csproj
+msbuild "Plain Craft Launcher 2\Plain Craft Launcher 2.vbproj" -p:Configuration=Release -m
+```
+
+产物位于 `Plain Craft Launcher 2\bin\Plain Craft Launcher 2.exe`。
+
+仓库提供 `.github/workflows/build.yml`。推送或手动触发后，会在 `windows-latest` 上分别编译 Release 与 Snapshot，并把 Release 的 `bin` 目录上传为 Artifact。
+
+## 协议
+
+- 上游原文《PCL 分发有限许可》与《PCL 存储库合理使用指南》保持原样，见 `LICENCE`。
+- 本修改版的额外约定见 `LICENCE` 文末的《PCL-EDIT 附加说明》。
+- 功能说明（可供其他 AI 使用）见 `PROMPT.md`。
+
+## 上游
+
+本仓库是第三方修改版，不是官方版本。上游项目与作者：
+
+- 项目：<https://github.com/Meloong-Git/PCL>
+- 作者：龙腾猫跃（LTCat / Meloong）
+- 赞助：<https://meloong.com/afd/a/LTCat>

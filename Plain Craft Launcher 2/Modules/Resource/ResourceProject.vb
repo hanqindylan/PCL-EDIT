@@ -75,6 +75,11 @@ Public Class ResourceProject
     ''' 若非从 Modrinth 获取则为 Nothing。
     ''' </summary>
     Public ReadOnly UnsafeGameVersions As List(Of String)
+    ''' <summary>
+    ''' 按 Minecraft 版本归类的加载器。仅在筛选了具体版本并完成核对后才有值（#9426）。
+    ''' 搜索结果自带的 <see cref="ModLoaders"/> 是工程全部版本的并集，不能直接当作某个版本的支持情况。
+    ''' </summary>
+    Public VersionModLoaders As Dictionary(Of String, ModLoaders) = Nothing
 
     '数据库信息
 
@@ -452,7 +457,8 @@ Public Class ResourceProject
     ''' <summary>
     ''' 将当前工程信息实例化为控件。
     ''' </summary>
-    Public Function ToResourceItem(ShowMcVersionDesc As Boolean, ShowLoaderDesc As Boolean) As MyVirtualizingElement(Of MyResourceItem)
+    ''' <param name="GameVersion">当前筛选的 Minecraft 版本。若不为空，加载器描述只列举该版本实际支持的加载器（#9426）。</param>
+    Public Function ToResourceItem(ShowMcVersionDesc As Boolean, ShowLoaderDesc As Boolean, Optional GameVersion As String = Nothing) As MyVirtualizingElement(Of MyResourceItem)
         '获取版本描述
         Dim GameVersionDescription As String
         If Drops Is Nothing OrElse Not Drops.Any() Then
@@ -499,9 +505,22 @@ Public Class ResourceProject
             Next
             GameVersionDescription = Segments.Join(", ")
         End If
+        '获取指定 Minecraft 版本实际支持的加载器（#9426）
+        '没有核对数据时回退到工程的全局加载器集合
+        Dim GetModLoadersForVersion =
+        Function(Version As String) As ModLoaders
+            Dim VersionLoaders As ModLoaders
+            If Not String.IsNullOrEmpty(Version) AndAlso VersionModLoaders IsNot Nothing AndAlso
+               VersionModLoaders.TryGetValue(Version, VersionLoaders) Then
+                Return VersionLoaders
+            End If
+            Return ModLoaders
+        End Function
         '获取 Mod 加载器描述
+        '筛选了具体 MC 版本时，工程的全局加载器集合会包含其他版本才支持的加载器（例如 Forge/Fabric 双支持的 Mod 在 1.20.1 只有 Fabric），
+        '此时必须按该版本实际支持的加载器来描述，否则会错误列举出该版本不支持的加载器（#9426）
         Dim ModLoaderDescriptionFull As String, ModLoaderDescriptionPart As String
-        Dim ModLoadersForDesc = ModLoaders.Flags().ToList()
+        Dim ModLoadersForDesc = GetModLoadersForVersion(GameVersion).Flags().ToList()
         Select Case ModLoadersForDesc.Count
             Case 0
                 If ModLoadersForDesc.IsSingle Then

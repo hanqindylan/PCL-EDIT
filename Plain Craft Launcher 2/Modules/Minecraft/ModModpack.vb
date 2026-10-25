@@ -267,13 +267,29 @@ Public Module ModModpack
             ModDownloadLoaders.Add(New LoaderTask(Of JArray, List(Of NetFile))("构造 Mod 下载信息",
             Sub(Task As LoaderTask(Of JArray, List(Of NetFile)))
                 Dim FileList As New Dictionary(Of Integer, NetFile)
+                '获取可选 Mod 的项目名：displayName 由 Mod 作者自行填写，可能只写版本信息，需要在弹窗中附上项目名（#9374）
+                Dim OptionalProjectNames As New Dictionary(Of String, String)
+                If ModOptionalList.Any() Then
+                    Try
+                        OptionalProjectNames = ResourceProject.FromProjectIds(
+                            Task.Input.Where(Function(j) j("modId") IsNot Nothing AndAlso ModOptionalList.Contains(j("id").ToObject(Of Integer))).
+                            Select(Function(j) j("modId").ToString).Distinct(), ResourcePlatforms.CurseForge).
+                            ToDictionary(Function(p) p.Id, Function(p) p.TranslatedName)
+                    Catch ex As Exception
+                        Logger.Warn(ex, "获取整合包可选 Mod 的项目名失败")
+                    End Try
+                End If
                 For Each ModJson In Task.Input
                     Dim Id As Integer = ModJson("id").ToObject(Of Integer)
                     '跳过重复的 Mod（疑似 CurseForge Bug）
                     If FileList.ContainsKey(Id) Then Continue For
                     '可选 Mod 提示
                     If ModOptionalList.Contains(Id) Then
-                        If MyMsgBox("是否要下载整合包中的可选文件 " & ModJson("displayName").ToString & "？", "下载可选文件", "是", "否") = 2 Then
+                        Dim OptionalName As String = ModJson("displayName").ToString
+                        Dim ProjectName As String = Nothing
+                        OptionalProjectNames.TryGetValue(ModJson("modId")?.ToString, ProjectName)
+                        If Not String.IsNullOrEmpty(ProjectName) Then OptionalName = ProjectName & "（" & OptionalName & "）"
+                        If MyMsgBox("是否要下载整合包中的可选文件 " & OptionalName & "？", "下载可选文件", "是", "否") = 2 Then
                             Continue For
                         End If
                     End If
@@ -282,7 +298,7 @@ Public Module ModModpack
                     If ModJson("modules").Any Then 'modules 可能返回 null（#1006）
                         Dim ModuleNames = CType(ModJson("modules"), JArray).Select(Function(l) l("name").ToString).ToList
                         If ModuleNames.Contains("META-INF") OrElse ModuleNames.Contains("mcmod.info") OrElse ModuleNames.Contains("fabric.mod.json") OrElse
-                            ModJson?("FileName")?.ToString.EndsWithF(".jar", True) Then
+                            ModJson?("fileName")?.ToString.EndsWithF(".jar", True) Then 'CurseForge API 返回的是 fileName 而非 FileName（#9412）
                             TargetFolder = "mods" : Type = ResourceTypes.Mod
                         ElseIf ModuleNames.Contains("pack.mcmeta") Then
                             TargetFolder = "resourcepacks" : Type = ResourceTypes.ResourcePack

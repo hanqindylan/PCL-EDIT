@@ -257,13 +257,18 @@ Public Module ModWatcher
         Private IsWindowAppeared As Boolean = False
         ''' <summary>
         ''' 窗口检查是否已经完成。这不一定代表着找到了窗口（如果没有找到，IsWindowAppeared 仍为 False）。
+        ''' 在需要设置自定义窗口标题时，检查不会真正结束，以便在游戏窗口被重新创建后重新获取窗口（#9482）。
         ''' </summary>
         Private IsWindowFinished As Boolean = False
         Private WindowHandle As IntPtr
+        Private WindowMaximizeDone As Boolean = False
         Private Sub TimerWindow()
             Try
                 If GameProcess.HasExited Then Return
-                If IsWindowFinished Then Return
+                '无需设置自定义窗口标题时，找到窗口后便不必继续检查
+                '需要设置标题时则继续检查：OptiFine 开启抗锯齿等情况下，游戏会在启动过程中销毁并重新创建游戏窗口（#9482），
+                '若仍对已销毁的旧窗口设置标题，自定义窗口标题会失效
+                If IsWindowFinished AndAlso WindowTitle = "" Then Return
                 '获取全部窗口，检查是否有新增的
                 Dim MinecraftWindow As KeyValuePair(Of IntPtr, String)? = Nothing
                 Try
@@ -278,11 +283,18 @@ Public Module ModWatcher
                 '已找到窗口
                 If Not MinecraftWindowName.StartsWithF("FML") AndAlso Not MinecraftWindowName.StartsWithF("Quilt Loader") Then
                     '已找到 Minecraft 窗口
+                    If IsWindowFinished Then
+                        '之前已经找到过窗口，检查是否是同一个窗口（#9482）
+                        If MinecraftWindowHandle = WindowHandle Then Return '窗口没有变化
+                        WatcherLog($"Minecraft 窗口已被重新创建：{MinecraftWindowName}（{MinecraftWindowHandle.ToInt64}）")
+                    Else
+                        WatcherLog($"Minecraft 窗口已加载：{MinecraftWindowName}（{MinecraftWindowHandle.ToInt64}）")
+                    End If
                     WindowHandle = MinecraftWindowHandle
-                    WatcherLog($"Minecraft 窗口已加载：{MinecraftWindowName}（{MinecraftWindowHandle.ToInt64}）")
                     IsWindowFinished = True
                     '最大化
-                    If Settings.Get(Of Integer)("LaunchArgumentWindowType") = 4 Then
+                    If Not WindowMaximizeDone AndAlso Settings.Get(Of Integer)("LaunchArgumentWindowType") = 4 Then
+                        WindowMaximizeDone = True
                         RunInNewThread(
                         Sub()
                             Try
@@ -301,6 +313,9 @@ Public Module ModWatcher
                     WatcherLog("Mod Loader 窗口已加载：" & MinecraftWindowName & "（" & MinecraftWindowHandle.ToInt64 & "）")
                 End If
                 IsWindowAppeared = True
+                '窗口已出现，立即更新进度，无需等待下一条游戏日志（#9501）
+                'ProgressUpdate 原本只在 TimerLog 处理新日志时才会被调用，若游戏在窗口弹出后一段时间内没有日志输出，启动状态将无法及时结束
+                If State = MinecraftState.Loading Then ProgressUpdate()
             Catch ex As Exception
                 Logger.Error(ex, "检查 Minecraft 窗口失败")
             End Try
@@ -327,7 +342,9 @@ Public Module ModWatcher
                     Dim WindowText As String = str.ToString
                     '有的 Mod 可以修改窗口标题，所以不能检测是否为 Minecraft 打头，这并不准确
                     '部分版本会搞个 GLFW message window，高版本还有个 Hidden Utility Window，都要反选
-                    If String.IsNullOrWhiteSpace(WindowText) OrElse WindowText = "SDL_app" OrElse WindowText = "PopupMessageWindow" OrElse
+                    'LWJGL（1.12.2 及以下版本）的真实窗口在创建后一段时间内标题为空，不能因此跳过（#9501）
+                    Dim IsEmptyTitleAllowed As Boolean = ClassName = "LWJGL"
+                    If (String.IsNullOrWhiteSpace(WindowText) AndAlso Not IsEmptyTitleAllowed) OrElse WindowText = "SDL_app" OrElse WindowText = "PopupMessageWindow" OrElse
                        WindowText.StartsWithF("GLFW") OrElse WindowText.EndsWithF("Hidden Utility Window") Then Return
                     '获取窗口关联的进程
                     Dim ProcessId As Integer

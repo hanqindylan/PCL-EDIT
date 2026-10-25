@@ -24,12 +24,12 @@ Public Class PclLogger
             Case LogBehavior.Toast
                 Hint(BriefText, HintType.Red, False)
             Case LogBehavior.Alert
-                MyMsgBox(DetailText, "错误", IsWarn:=True)
+                MyMsgBox(ShortenErrorText(DetailText), "错误", IsWarn:=True)
             Case LogBehavior.AlertThenFeedback
                 If PageSetupSystem.IsLauncherNewest Then
-                    If MyMsgBox(DetailText & vbCrLf & vbCrLf & "是否反馈此问题？如果不反馈，这个问题可能永远无法得到解决！", "错误", "反馈", "取消", IsWarn:=True) = 1 Then Feedback(False, True)
+                    If MyMsgBox(ShortenErrorText(DetailText) & vbCrLf & vbCrLf & "是否反馈此问题？如果不反馈，这个问题可能永远无法得到解决！", "错误", "反馈", "取消", IsWarn:=True) = 1 Then Feedback(False, True)
                 Else
-                    MyMsgBox(DetailText & vbCrLf & vbCrLf & "将 PCL 更新至最新版或许可以解决这个问题……", "错误", IsWarn:=True)
+                    MyMsgBox(ShortenErrorText(DetailText) & vbCrLf & vbCrLf & "将 PCL 更新至最新版或许可以解决这个问题……", "错误", IsWarn:=True)
                 End If
             Case LogBehavior.AlertThenCrash
                 Static FirstTrigger As Boolean = True
@@ -50,5 +50,31 @@ Public Class PclLogger
         '遥测
         If Behavior >= LogBehavior.Toast Then Telemetry("错误日志", "Exception", DetailText)
     End Sub
+
+    ''' <summary>
+    ''' 错误弹窗里的文本过长时，WPF 的自动换行文本框在滚动时会明显卡顿（#9325）。
+    ''' 弹窗只保留开头一段，完整内容写入临时文件，并通过按钮打开。
+    ''' </summary>
+    Private Const ErrorDialogMaxLength As Integer = 4000
+    Private Shared Function ShortenErrorText(Text As String) As String
+        If Text Is Nothing OrElse Text.Length <= ErrorDialogMaxLength Then Return Text
+        Try
+            Dim FilePath = RequestTaskTempFolder() & "Error.txt"
+            File.WriteAllText(FilePath, Text, Encoding.UTF8)
+            RunInUi(Sub()
+                        If FrmMain Is Nothing OrElse FrmMain.PanMsg Is Nothing Then Return
+                        Dim Buttons = FrmMain.PanMsg.Children.OfType(Of MyMsgText).LastOrDefault()
+                        If Buttons Is Nothing Then Return
+                        Dim OpenButton As New MyButton With {.Text = "查看完整日志", .Margin = New Thickness(12, 0, 0, 0), .Padding = New Thickness(5, 0, 5, 0)}
+                        AddHandler OpenButton.Click, Sub() OpenExplorer(FilePath)
+                        Buttons.PanBtn.Children.Insert(0, OpenButton)
+                    End Sub)
+            Logger.Info($"错误信息过长（{Text.Length} 字符），完整内容已写入：{FilePath}")
+        Catch ex As Exception
+            Logger.Warn(ex, "保存完整错误信息失败")
+        End Try
+        Return Text.Substring(0, ErrorDialogMaxLength) & vbCrLf & vbCrLf &
+            $"（错误信息过长，此处仅显示开头 {ErrorDialogMaxLength} 个字符。完整内容已写入日志，可点击左下角的按钮查看。）"
+    End Function
 
 End Class

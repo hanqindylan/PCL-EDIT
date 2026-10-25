@@ -10,6 +10,22 @@ Public Class PageLaunchRight
         PanHint.Visibility =
             (BuildType <> BuildTypes.Release AndAlso VersionBranchMain = "Official" AndAlso
              CurrentRank < DonationRank.Rank23 AndAlso Not Settings.Get(Of Boolean)("HintSnapshot")).ToVisibility
+        '主页替换标记依赖登录结果与当前版本，二者在启动时都是异步就绪的（#9343）
+        Static HomepageRefreshHooked As Boolean = False
+        If Not HomepageRefreshHooked Then
+            HomepageRefreshHooked = True
+            AddHandler McLoginLoader.LoadingStateChanged, AddressOf RefreshHomepageOnReady
+        End If
+    End Sub
+    ''' <summary>
+    ''' 登录完成或当前版本变化后重新替换主页标记（#9343）。
+    ''' </summary>
+    Private Sub RefreshHomepageOnReady(Loader As LoaderBase)
+        If Loader.State <> LoadState.Finished Then Return
+        RunInUi(Sub()
+                    LoadedContentHash = Nothing '登录信息变化后，原先替换出的内容已经过期
+                    Refresh()
+                End Sub)
     End Sub
 
 #Region "主页"
@@ -30,6 +46,13 @@ Public Class PageLaunchRight
         End Sub)
     End Sub
     Private Sub RefreshReal()
+        '本地文件在启动瞬间加载时，登录与版本列表都还没完成，此时替换 {user}、{version} 会得到空值（#9343）
+        '先等二者就绪再加载，避免第一次打开时标记缺失
+        If Settings.Get(Of Integer)("UiCustomType") = 1 AndAlso
+           (McLoginLoader.State <> LoadState.Finished OrElse McInstanceListLoader.State <> LoadState.Finished) Then
+            Logger.Info("主页替换标记所需的登录或版本列表尚未完成，延迟加载")
+            Return
+        End If
         Dim Content As String = Nothing, Url As String = Nothing
         Select Case Settings.Get(Of Integer)("UiCustomType")
             Case 1
@@ -216,6 +239,13 @@ Public Class PageLaunchRight
         End If
     End Sub
 
+    ''' <summary>
+    ''' 使当前主页内容失效并重新加载，用于替换标记的来源发生变化时（#9343）。
+    ''' </summary>
+    Public Sub InvalidateHomepage()
+        LoadedContentHash = Nothing
+        Refresh()
+    End Sub
     ''' <summary>
     ''' 清空主页缓存信息。
     ''' </summary>

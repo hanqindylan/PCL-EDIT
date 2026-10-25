@@ -547,6 +547,8 @@ Install:
         Try
             '构造下载信息
             ModList = ModList.ToList() '防止刷新影响迭代器
+            '每个更新任务使用独立的临时文件夹：多个更新任务可能同时更新相同的 Mod，若共用全局临时目录会相互覆盖或提前移走文件，导致替换失败（#9360）
+            Dim TaskTempFolder As String = RequestTaskTempFolder()
             Dim FileList As New List(Of NetFile)
             Dim FileCopyList As New Dictionary(Of String, String)
             For Each Entry As LocalResourceFile In ModList
@@ -577,7 +579,7 @@ Install:
                     NewestReplaceName = NewestSegs.Join("-")
                 End If
                 '添加到下载列表
-                Dim TempAddress As String = PathTemp & "mods\" & Entry.File.Name.Replace(CurrentReplaceName, NewestReplaceName) '需要下载到 mods 文件夹，以便重复文件检查时识别
+                Dim TempAddress As String = TaskTempFolder & "mods\" & Entry.File.Name.Replace(CurrentReplaceName, NewestReplaceName) '需要下载到 mods 文件夹，以便重复文件检查时识别
                 Dim RealAddress As String = Path.Combine(PathUtils.RemoveLastPart(Entry.File.FullName), Entry.File.Name.Replace(CurrentReplaceName, NewestReplaceName))
                 FileList.Add(File.ToNetFile(TempAddress, ResourceVersion.DownloadReason.Update, PageInstanceLeft.Instance.Version.VanillaName, PageInstanceLeft.Instance.Version.ModLoaders))
                 FileCopyList(TempAddress) = RealAddress

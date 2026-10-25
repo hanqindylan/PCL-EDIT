@@ -407,6 +407,11 @@ Public Module ModJava
                         If Not DownloadListWorker.HasSucceeded Then DownloadListWorker.Start(c, p?.SplitTo(0.4))
                         DownloadListWorker.WaitIfRunning(cancellationToken:=c)
                         p?.Set(0.4, skiped:=True)
+                        '检查上次运行是否成功，避免直接读取 LastResult 抛出难以理解的 InvalidOperationException（#9533）
+                        If Not DownloadListWorker.LastSucceeded Then
+                            Throw New Exception("获取 Java 下载列表失败，请检查网络连接后重试" & vbCrLf &
+                                                "也可以尝试切换下载源，或手动安装所需版本的 Java")
+                        End If
                         Dim Components = DownloadListWorker.LastResult
 
                         '确定要下载的目标 Java

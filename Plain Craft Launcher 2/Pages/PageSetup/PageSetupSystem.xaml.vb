@@ -108,6 +108,11 @@ Public Class PageSetupSystem
     ''' </summary>
     Public Shared Function IsLauncherNewest() As Boolean?
         Try
+            'PCL-EDIT 更新缓存（#9553）
+            Dim EditCache As String = If(FileUtils.TryReadAsString(PathTemp & "Cache\EditUpdate.cfg"), "")
+            If EditCache.Contains("|") Then
+                Return CompareEditVersion(EditCache.Split("|")(0), VersionBaseName) <= 0
+            End If
             '确认服务器公告是否正常
             Dim ServerContent As String = If(FileUtils.TryReadAsString(PathTemp & "Cache\Notice.cfg"), "")
             If ServerContent.Split("|").Count < 3 Then Return Nothing

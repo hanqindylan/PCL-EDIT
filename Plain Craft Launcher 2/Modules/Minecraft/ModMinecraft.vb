@@ -190,6 +190,11 @@ Public Module ModMinecraft
             If value Is Nothing Then Return
             '重置缓存的下载文件夹
             PageDownloadResourceDetail.CachedFolder.Clear()
+            '主页替换标记中的 {version} 依赖当前版本，版本变化后需要重新替换（#9343）
+            RunInUi(Sub()
+                        If FrmLaunchRight Is Nothing Then Return
+                        FrmLaunchRight.InvalidateHomepage()
+                    End Sub)
             '统一通行证重判
             If AniControlEnabled = 0 AndAlso
                Settings.Get(Of String)("VersionServerNide", Instance:=value) <> Settings.Get(Of String)("CacheNideServer") AndAlso
@@ -1138,8 +1143,24 @@ OnLoaded:
         Dim InstanceList As New List(Of McInstance)
 
 #Region "循环加载每个版本的信息"
-        For Each VersionFolderInfo As DirectoryInfo In DirectoryUtils.GetInfo(Folder & "versions").GetDirectories
-            If Not VersionFolderInfo.Exists OrElse Not VersionFolderInfo.EnumerateFiles.Any Then
+        '先获取文件夹列表，避免 versions 文件夹本身在扫描期间被移除时直接失败（#9499）
+        Dim VersionFolderInfos As DirectoryInfo()
+        Try
+            VersionFolderInfos = DirectoryUtils.GetInfo(Folder & "versions").GetDirectories
+        Catch ex As DirectoryNotFoundException
+            Logger.Warn($"versions 文件夹在扫描期间被移除，跳过本次扫描：{Folder}versions")
+            VersionFolderInfos = New DirectoryInfo() {}
+        End Try
+        For Each VersionFolderInfo In VersionFolderInfos
+            '检查文件夹中是否存在文件（#9499：文件夹可能在扫描期间被重命名或删除，例如正在修改版本，此时应跳过而非让整个列表加载失败）
+            Dim HasAnyFile As Boolean = False
+            Try
+                HasAnyFile = VersionFolderInfo.Exists AndAlso VersionFolderInfo.EnumerateFiles.Any
+            Catch ex As IOException
+                Logger.Info($"跳过在扫描期间无法访问的文件夹：{VersionFolderInfo.FullName}（{ex.GetDisplay(False)}）")
+                Continue For
+            End Try
+            If Not HasAnyFile Then
                 Logger.Info($"跳过空文件夹：{VersionFolderInfo.FullName}")
                 Continue For
             End If
@@ -1366,6 +1387,25 @@ OnLoaded:
         Public IsVaild As Boolean
     End Structure
     ''' <summary>
+    ''' 检测图片是否完全透明，即所有像素的 Alpha 通道均为 0。
+    ''' </summary>
+    Private Function IsImageFullyTransparent(Image As MyBitmap) As Boolean
+        Dim Pic = Image.Pic
+        Dim rect As New System.Drawing.Rectangle(0, 0, Pic.Width, Pic.Height)
+        Dim Data = Pic.LockBits(rect, System.Drawing.Imaging.ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format32bppArgb)
+        Try
+            Dim Bytes(Math.Abs(Data.Stride) * Pic.Height - 1) As Byte
+            System.Runtime.InteropServices.Marshal.Copy(Data.Scan0, Bytes, 0, Bytes.Length)
+            'Format32bppArgb 中每 4 字节为一个像素，第 4 字节（索引 3）为 Alpha 通道
+            For i = 3 To Bytes.Length - 1 Step 4
+                If Bytes(i) <> 0 Then Return False
+            Next
+            Return True
+        Finally
+            Pic.UnlockBits(Data)
+        End Try
+    End Function
+    ''' <summary>
     ''' 要求玩家选择一个皮肤文件，并进行相关校验。
     ''' </summary>
     Public Function McSkinSelect() As McSkinInfo
@@ -1378,6 +1418,11 @@ OnLoaded:
             If Image.Pic.Width <> 64 OrElse Not (Image.Pic.Height = 32 OrElse Image.Pic.Height = 64) Then
                 Hint("皮肤图片大小应为 64x32 像素或 64x64 像素！", HintType.Red)
                 Return New McSkinInfo With {.IsVaild = False}
+            End If
+            '检查是否为全透明皮肤（#9448）
+            'Minecraft 的皮肤底层不支持透明，全透明皮肤在游戏内会显示为黑色，与启动器头像的透明显示不一致，需要提前告知玩家
+            If IsImageFullyTransparent(Image) Then
+                Hint("注意：所选皮肤为全透明皮肤，在游戏内会显示为黑色而非透明！", HintType.Red)
             End If
             Dim FileInfo = FileUtils.GetInfo(FileName)
             If FileInfo.Length > 24 * 1024 Then

@@ -374,7 +374,8 @@ GroupDone:
         End Try
     End Sub
     '资源下载；整合包另存为
-    Public Shared CachedFolder As New Dictionary(Of ResourceTypes, String) '仅在本次缓存的下载文件夹
+    '键包含资源类型、加载器与 MC 版本，避免在不同加载器或版本的版本文件夹之间错误导向（#9536）
+    Public Shared CachedFolder As New Dictionary(Of String, String) '仅在本次缓存的下载文件夹
     Public Sub Save_Click(sender As Object, e As EventArgs)
         Dim File As ResourceVersion = If(TypeOf sender Is MyListItem, sender, sender.Parent).Tag
         RunInNewThread(
@@ -450,8 +451,9 @@ GroupDone:
                         Return AllowedLoaders = ModLoaders.None OrElse AllowedLoaders.Flags.Intersect(Instance.Version.ModLoaders.Flags).Any
                     End Function
                     '获取常规资源默认下载位置
-                    If CachedFolder.ContainsKey(File.ResourceType) Then
-                        DefaultFolder = CachedFolder(File.ResourceType)
+                    Dim CacheKey As String = $"{CInt(File.ResourceType)}|{CInt(AllowedLoaders)}|{String.Join(",", File.GameVersions.OrderBy(Function(v) v))}"
+                    If CachedFolder.ContainsKey(CacheKey) Then
+                        DefaultFolder = CachedFolder(CacheKey)
                         Logger.Info($"使用上次下载时的文件夹作为默认下载位置：{DefaultFolder}")
                     ElseIf McInstanceSelected IsNot Nothing AndAlso IsInstanceSuitable(McInstanceSelected) Then
                         DefaultFolder = $"{McInstanceSelected.PathIndie}{SubFolder}"
@@ -516,7 +518,7 @@ GroupDone:
                     If Target Is Nothing Then Return
                     '构造步骤加载器
                     Dim LoaderName As String = Desc & "下载：" & PathUtils.GetFileNameWithoutExtension(Target) & " "
-                    If Not PathUtils.IsSame(PathUtils.RemoveLastPart(Target), DefaultFolder) Then CachedFolder(File.ResourceType) = PathUtils.RemoveLastPart(Target)
+                    If Not PathUtils.IsSame(PathUtils.RemoveLastPart(Target), DefaultFolder) Then CachedFolder(CacheKey) = PathUtils.RemoveLastPart(Target)
                     Dim Loaders As New List(Of LoaderBase)
                     Loaders.Add(New LoaderDownload("下载文件", {
                         File.ToNetFile(Target, If(TargetResourceType = ResourceTypes.Any, ResourceVersion.DownloadReason.Dependency, ResourceVersion.DownloadReason.Standalone))

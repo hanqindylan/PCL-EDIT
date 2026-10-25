@@ -190,7 +190,7 @@ Public Class PageSpeedLeft
                     AddHandler Cancel.Click,
                     Sub(sender As MyIconButton, e As EventArgs)
                         AniDispose(sender, False)
-                        AniDispose(Card, True, Sub() If FrmSpeedRight.PanMain.Children.Count = 0 AndAlso FrmMain.PageCurrent = FormMain.PageType.TaskManager Then FrmMain.PageBack())
+                        AniDispose(Card, True, AddressOf TryReturnToHome)
                         RightCards.Remove(Loader.Name)
                         LoaderTaskbar.Remove(Loader)
                         Logger.Info($"关闭任务管理卡片：{Loader.Name}，且移出任务列表")
@@ -226,8 +226,16 @@ Public Class PageSpeedLeft
     ''' <summary>
     ''' 若没有任务，尝试返回主页。
     ''' </summary>
+    ''' <remarks>
+    ''' 还要求任务列表中没有会显示卡片的任务（#9369）：
+    ''' 任务卡片由 Watcher 创建，而 Watcher 仅在处于任务管理页时才会运行，因此刚进入页面时卡片可能尚未创建
+    ''' （例如整合包下载完成后，下载任务的卡片销毁与安装任务的卡片创建之间存在时间差）。
+    ''' 此时若仅因右侧没有卡片就返回，会把手动进入任务管理页面的用户瞬间弹回上一个页面。
+    ''' </remarks>
     Private Sub TryReturnToHome()
-        If FrmSpeedRight.PanMain.Children.Count = 0 AndAlso FrmMain.PageCurrent = FormMain.PageType.TaskManager Then
+        If FrmSpeedRight.PanMain.Children.Count = 0 AndAlso
+           Not LoaderTaskbar.Any(Function(Task) Task.Show) AndAlso
+           FrmMain.PageCurrent = FormMain.PageType.TaskManager Then
             FrmMain.PageBack()
         End If
     End Sub

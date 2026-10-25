@@ -77,7 +77,14 @@ Public Module ModLaunch
         If ModeDebug Then
             RunInUi(
             Sub()
-                FrmLaunchRight.LabLog.AppendText($"[{Date.Now:HH':'mm':'ss'.'fff}] {Text}{vbCrLf}")
+                '换行仅作为行间分隔：已有输出时才在行首插入换行，避免文本以换行结尾（#9495）
+                'WPF 的 TextBox 在文本以换行结尾时会额外渲染一个空段落，从而多出一行空白；
+                '而早期版本无判断地在行首添加换行，又会在开头多出一行空白
+                If FrmLaunchRight.LabLog.Text = "" Then
+                    FrmLaunchRight.LabLog.AppendText($"[{Date.Now:HH':'mm':'ss'.'fff}] {Text}")
+                Else
+                    FrmLaunchRight.LabLog.AppendText($"{vbCrLf}[{Date.Now:HH':'mm':'ss'.'fff}] {Text}")
+                End If
             End Sub)
         End If
         Logger.Log(Text, Level)
@@ -1401,6 +1408,31 @@ NextInstance:
         Return DeduplicateJavaArguments(Args, True)
     End Function
     '游戏参数部分
+    ''' <summary>
+    ''' 判断当前游戏版本是否支持 --width 与 --height 启动参数。
+    ''' 该参数于 13w25a 加入，1.6 之前的正式版与 13w24a 及更早的快照均不支持，
+    ''' 传入会导致游戏直接崩溃（#9404）。
+    ''' </summary>
+    Private Function McSupportResolutionArgs() As Boolean
+        Dim Name As String = McInstanceSelected.Version.VanillaName
+        If String.IsNullOrEmpty(Name) Then Return True
+        Name = Name.Lower()
+        '快照版本：比较年与周，13w25a 起支持
+        Dim SnapshotMatch = System.Text.RegularExpressions.Regex.Match(Name, "^(\d{2})w(\d{2})")
+        If SnapshotMatch.Success Then
+            Dim SnapshotYear As Integer = Integer.Parse(SnapshotMatch.Groups(1).Value)
+            Dim SnapshotWeek As Integer = Integer.Parse(SnapshotMatch.Groups(2).Value)
+            Return SnapshotYear > 13 OrElse (SnapshotYear = 13 AndAlso SnapshotWeek >= 25)
+        End If
+        '正式版：1.6 起支持
+        If Name.StartsWithF("1.") Then
+            Dim Minor As Integer = 0
+            Integer.TryParse(Name.Substring(2).Split("."c)(0), Minor)
+            Return Minor >= 6
+        End If
+        'b1.7.3、a0.1.0、rd-132328 等远古版本不支持
+        Return False
+    End Function
     Private Function McLaunchArgumentsGame() As List(Of String)
         Dim Arg As String = ""
 
@@ -1409,7 +1441,12 @@ NextInstance:
         If McInstanceSelected.JsonObject("minecraftArguments")?.ToString.Any Then
             Dim BasicString As String = McInstanceSelected.JsonObject("minecraftArguments").ToString
             McLaunchLog($"旧版游戏参数：" & BasicString)
-            BasicString += " --height ${resolution_height} --width ${resolution_width}" '总是添加宽高选项，之后去重的时候会覆盖 MC 自带的
+            If McSupportResolutionArgs() Then
+                BasicString += " --height ${resolution_height} --width ${resolution_width}" '总是添加宽高选项，之后去重的时候会覆盖 MC 自带的
+            Else
+                '13w24a 及更早的版本不支持宽高参数，传入会导致启动崩溃（#9404）
+                McLaunchLog("当前版本不支持 --width 与 --height 参数，已跳过宽高选项")
+            End If
             Arg &= " " & BasicString
         End If
         '新版 MC：从版本 JSON 获取参数

@@ -106,7 +106,6 @@ Public Class DragHelper
     Private Const WM_DROPFILES As UInteger = &H233
     Private Const MSGFLT_ALLOW As UInteger = 1
     Private Const MSGFLT_ADD As UInteger = 1
-    Private Const MAX_PATH As Integer = 260
 
     Private Shared Sub ChangeMessageFilter(handle As IntPtr)
         Dim ver As Version = Environment.OSVersion.Version
@@ -138,7 +137,10 @@ Public Class DragHelper
         ReDim dropFilePaths(CInt(fileCount) - 1)
 
         For i As UInteger = 0 To CInt(fileCount) - 1
-            Dim sb As New StringBuilder(MAX_PATH)
+            '先查询所需缓冲长度（以字符计，不含末尾 null），再按实际长度分配（#9370）
+            'DragQueryFile 在缓冲不足时不会报错，而是把路径静默截断，导致长路径文件被误判为不存在
+            Dim RequiredLength As UInteger = DragQueryFile(wParam, i, Nothing, 0)
+            Dim sb As New StringBuilder(CInt(RequiredLength) + 1)
             Dim result As UInteger = DragQueryFile(wParam, i, sb, sb.Capacity)
             If result > 0 Then dropFilePaths(i) = sb.ToString()
         Next

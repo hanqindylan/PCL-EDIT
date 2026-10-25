@@ -223,7 +223,9 @@ Public Class PageSelectRight
                         '删除当前版本就更改选择
                         McInstanceSelected = MyVirtualizingElement.TryInit(Parent.Children(0)).Tag
                     End If
-                    LoaderFolderRun(McInstanceListLoader, McFolderSelected, LoaderFolderRunType.UpdateOnly, MaxDepth:=1, ExtraPath:="versions\")
+                    '必须强制刷新：若此时正有其他加载器（如刚下载完毕的版本列表加载）已枚举过目录，
+                    '仅更新时间戳会残留已被删除的幽灵版本，且后续 RunOnUpdated 会因时间戳匹配而跳过（#9475）
+                    LoaderFolderRun(McInstanceListLoader, McFolderSelected, LoaderFolderRunType.ForceRun, MaxDepth:=1, ExtraPath:="versions\")
                 Else
                     '删除后没剩了
                     LoaderFolderRun(McInstanceListLoader, McFolderSelected, LoaderFolderRunType.ForceRun, MaxDepth:=1, ExtraPath:="versions\")

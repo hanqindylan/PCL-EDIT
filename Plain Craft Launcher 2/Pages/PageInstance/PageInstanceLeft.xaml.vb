@@ -120,6 +120,7 @@ Public Class PageInstanceLeft
             Case FormMain.PageSubType.InstanceExport
                 FrmInstanceExport?.RefreshAll()
                 ItemExport.Checked = True
+                Hint("正在刷新……", Log:=False) '#9345，与其他刷新按钮保持一致
             Case FormMain.PageSubType.InstanceModify
                 FrmDownloadModify?.PageLoaderRestart()
                 ItemModify.Checked = True

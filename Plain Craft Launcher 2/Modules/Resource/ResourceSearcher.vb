@@ -417,6 +417,12 @@ NextPage:
                 RawResults.KeepIf(Function(p) p.ModLoaders = ModLoaders.None OrElse p.ModLoaders.HasFlagF(ModLoaders.Forge))
             End If
 
+            '筛选了具体 MC 版本时，核对每个工程在该版本实际支持的加载器（#9426）
+            '搜索接口返回的加载器是工程全部版本的并集，直接用来展示会把其他版本才支持的加载器也列出来
+            If Not String.IsNullOrEmpty(Request.GameVersion) Then
+                ApplyVersionLoaderFilter(RawResults, Request)
+            End If
+
             '确保存在结果
             Storage.ErrorMessage = Nothing
             If Not RawResults.Any() Then
@@ -447,6 +453,81 @@ NextPage:
                 If Thread.IsAlive Then Thread.Interrupt()
             Next
         End Try
+
+#End Region
+
+#Region "按 Minecraft 版本核对加载器"
+
+    ''' <summary>
+    ''' 批量查询工程文件，确定每个工程在指定 Minecraft 版本上实际支持的加载器（#9426）。
+    ''' 若同时筛选了加载器，则移除该版本并不支持所选加载器的工程。
+    ''' 查询失败时保留原结果，避免因为网络问题把搜索结果清空。
+    ''' </summary>
+    Private Shared Sub ApplyVersionLoaderFilter(Projects As List(Of ResourceProject), Request As SearchRequest)
+        If Not Projects.Any Then Return
+        Dim VersionLoaders As New ConcurrentDictionary(Of String, ModLoaders)
+        Dim Threads As New List(Of Thread)
+
+        Dim CurseForgeIds = Projects.Where(Function(p) p.Platform = ResourcePlatforms.CurseForge).Select(Function(p) p.Id).Distinct.ToList
+        If CurseForgeIds.Any AndAlso Request.Sources.HasFlagF(ResourcePlatforms.CurseForge) Then
+            Threads.Add(RunInNewThread(
+            Sub()
+                Try
+                    Dim Body = "{""modIds"": [" & CurseForgeIds.Join(","c) & "], ""gameVersion"": """ & Request.GameVersion & """}"
+                    Dim Files As JArray = DlModRequest("https://api.curseforge.com/v1/mods/files", HttpMethod.Post, Body, "application/json")("data")
+                    For Each File As JObject In Files
+                        Dim ProjectId = File("modId").ToString
+                        Dim FileVersion = ResourceVersion.FromPlatformJson(File, ResourceTypes.Mod)
+                        If Not FileVersion.GameVersions.Contains(Request.GameVersion) Then Continue For
+                        VersionLoaders.AddOrUpdate(ProjectId, FileVersion.ModLoaders, Function(Key, Old) Old Or FileVersion.ModLoaders)
+                    Next
+                Catch ex As Exception
+                    Logger.Warn(ex, "按版本核对 CurseForge 加载器失败")
+                End Try
+            End Sub, "CurseForge Version Loaders"))
+        End If
+
+        Dim ModrinthIds = Projects.Where(Function(p) p.Platform = ResourcePlatforms.Modrinth).Select(Function(p) p.Id).Distinct.ToList
+        If ModrinthIds.Any AndAlso Request.Sources.HasFlagF(ResourcePlatforms.Modrinth) Then
+            'Modrinth 没有按版本批量查询文件的接口，只能逐个工程查询
+            For Each ProjectId In ModrinthIds
+                Dim CurrentId = ProjectId
+                Threads.Add(RunInNewThread(
+                Sub()
+                    Try
+                        Dim Files As JArray = DlModRequest($"https://api.modrinth.com/v2/project/{CurrentId}/version?game_versions=[""{Request.GameVersion}""]&include_changelog=false")
+                        Dim Loaders As ModLoaders = ModLoaders.None
+                        For Each File As JObject In Files
+                            Loaders = Loaders Or ResourceVersion.FromPlatformJson(File, ResourceTypes.Mod).ModLoaders
+                        Next
+                        If Files.Any Then VersionLoaders(CurrentId) = Loaders
+                    Catch ex As Exception
+                        Logger.Warn(ex, $"按版本核对 Modrinth 加载器失败（{CurrentId}）")
+                    End Try
+                End Sub, "Modrinth Version Loaders " & CurrentId))
+            Next
+        End If
+
+        For Each Thread In Threads
+            Thread.Join()
+        Next
+
+        For Each Project In Projects
+            Dim Loaders As ModLoaders
+            If Not VersionLoaders.TryGetValue(Project.Id, Loaders) Then Continue For
+            If Project.VersionModLoaders Is Nothing Then Project.VersionModLoaders = New Dictionary(Of String, ModLoaders)
+            Project.VersionModLoaders(Request.GameVersion) = Loaders
+        Next
+        If Request.ModLoaders <> ModLoaders.None Then
+            Projects.KeepIf(
+            Function(Project)
+                Dim Loaders As ModLoaders
+                '没有核对到该版本的文件时不剔除，避免接口异常导致结果被清空
+                If Project.VersionModLoaders Is Nothing OrElse Not Project.VersionModLoaders.TryGetValue(Request.GameVersion, Loaders) Then Return True
+                Return Loaders = ModLoaders.None OrElse Loaders.Flags.Intersect(Request.ModLoaders.Flags).Any()
+            End Function)
+        End If
+    End Sub
 
 #End Region
 

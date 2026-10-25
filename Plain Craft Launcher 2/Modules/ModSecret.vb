@@ -15,7 +15,8 @@ Friend Module ModSecret
 
 #Region "网络鉴权"
 
-    Public Const RestrictMcDownload As Boolean = True
+    'PCL-EDIT：恢复 MC 下载功能（开源版出于合规考虑默认阉割，本 Fork 将其恢复）
+    Public Const RestrictMcDownload As Boolean = False
     Friend Function SecretCdnSign(UrlWithMark As String) As String
         If Not UrlWithMark.EndsWithF("{CDN}") Then Return UrlWithMark
         Return UrlWithMark.Replace("{CDN}", "").Replace(" ", "%20")
@@ -145,14 +146,238 @@ Friend Module ModSecret
 
 #Region "更新"
 
+    'PCL-EDIT 更新功能（#9553）
+    '官方 notice.cgi 已对旧版客户端返回 403，无法再作为更新来源，故改用 GitHub Releases 作为更新源
+    Public Const EditUpdateRepo As String = "hanqindylan/PCL-EDIT"
+
+    ''' <summary>
+    ''' 获取 PCL-EDIT 在 GitHub 上的最新 Release 信息。失败时返回 Nothing。
+    ''' </summary>
+    Public Function GetEditLatestRelease() As JObject
+        Try
+            Dim Json As JArray = NetRequestByClientRetry($"https://api.github.com/repos/{EditUpdateRepo}/releases?per_page=1", RequireJson:=True).DeserializeJson()
+            If Json Is Nothing OrElse Not Json.Any() Then Return Nothing
+            Return CType(Json(0), JObject)
+        Catch ex As Exception
+            Logger.Warn(ex, "获取 PCL-EDIT 最新版本失败")
+            Return Nothing
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 将版本名解析为可比较的整型数组，例如 2.99.0.1 → {2, 99, 0, 1}。
+    ''' </summary>
+    Public Function ParseEditVersion(VersionName As String) As Integer()
+        If String.IsNullOrWhiteSpace(VersionName) Then Return {0, 0, 0, 0}
+        Dim Parts As New List(Of Integer)
+        For Each Part In VersionName.Trim().TrimStart("v"c).Split("."c)
+            Dim Value As Integer = 0
+            Integer.TryParse(Part, Value)
+            Parts.Add(Value)
+        Next
+        While Parts.Count < 4
+            Parts.Add(0)
+        End While
+        Return Parts.Take(4).ToArray()
+    End Function
+    ''' <summary>
+    ''' 比较两个版本名。返回正数表示 A 更新，返回负数表示 B 更新，0 表示相同。
+    ''' </summary>
+    Public Function CompareEditVersion(A As String, B As String) As Integer
+        Dim PartsA = ParseEditVersion(A), PartsB = ParseEditVersion(B)
+        For i = 0 To 3
+            If PartsA(i) <> PartsB(i) Then Return PartsA(i).CompareTo(PartsB(i))
+        Next
+        Return 0
+    End Function
+
+    ''' <summary>
+    ''' 手动检查更新。
+    ''' </summary>
     Friend Sub UpdateCheckByButton()
-        Hint("该版本中不包含更新功能……")
+        RunInThread(Sub() UpdateCheckInternal(True))
+    End Sub
+    ''' <summary>
+    ''' 启动时自动检查更新，遵循 启动器更新 设置（SystemSystemUpdate）。
+    ''' </summary>
+    Friend Sub UpdateCheckAuto()
+        If Settings.Get(Of Integer)("SystemSystemUpdate") = 3 Then Return '关闭更新提示
+        RunInThread(Sub() UpdateCheckInternal(False))
+    End Sub
+
+    ''' <summary>
+    ''' 检查 PCL-EDIT 的更新。
+    ''' IsFromButton 为真时，无论结果如何都会给出提示。
+    ''' </summary>
+    Private Sub UpdateCheckInternal(IsFromButton As Boolean)
+        Dim Latest As JObject = Nothing
+        Try
+            Latest = GetEditLatestRelease()
+        Catch ex As Exception
+            Logger.Warn(ex, "获取 PCL-EDIT 最新版本失败")
+        End Try
+        If Latest Is Nothing Then
+            If IsFromButton Then RunInUi(Sub() Hint("检查更新失败：无法连接更新服务器", HintType.Red))
+            Return
+        End If
+        Dim LatestName As String = Latest("tag_name").ToString().TrimStart("v"c)
+        Dim LatestUrl As String = If(Latest("html_url") IsNot Nothing, Latest("html_url").ToString(), $"https://github.com/{EditUpdateRepo}/releases")
+        '写入缓存，供 IsLauncherNewest 等处使用
+        Try
+            DirectoryUtils.Create(PathTemp & "Cache\")
+            FileUtils.Write(PathTemp & "Cache\EditUpdate.cfg", LatestName & "|" & LatestUrl, Encoding:=Encoding.UTF8)
+        Catch ex As Exception
+            Logger.Warn(ex, "写入更新缓存失败")
+        End Try
+        Logger.Info($"PCL-EDIT 最新版本：{LatestName}，当前版本：{VersionBaseName}")
+        If CompareEditVersion(LatestName, VersionBaseName) <= 0 Then
+            If IsFromButton Then RunInUi(Sub() Hint("当前已是最新版本"))
+            Return
+        End If
+        '选择了自动下载时直接下载，否则弹窗提示
+        If Settings.Get(Of Integer)("SystemSystemUpdate") = 0 AndAlso Not IsFromButton Then
+            DownloadEditUpdate(Latest, LatestName)
+            Return
+        End If
+        RunInUi(Sub() ShowEditUpdateDialog(LatestName, LatestUrl))
+    End Sub
+
+    ''' <summary>
+    ''' 显示更新提示窗口。
+    ''' </summary>
+    Private Sub ShowEditUpdateDialog(LatestName As String, LatestUrl As String)
+        Try
+            Select Case MyMsgBox(
+                $"发现新版本：{LatestName}{vbCrLf}当前版本：{VersionBaseName}{vbCrLf}{vbCrLf}是否现在下载并更新？",
+                "启动器更新", "立即更新", "查看详情", "取消")
+                Case 1
+                    RunInThread(Sub() DownloadEditUpdate(Nothing, LatestName))
+                Case 2
+                    OpenWebsite(LatestUrl)
+            End Select
+        Catch ex As Exception
+            Logger.Error(ex, "显示更新提示失败")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 下载 PCL-EDIT 的最新版本并执行替换更新。
+    ''' Latest 为 Nothing 时会重新获取。必须在工作线程执行。
+    ''' </summary>
+    Private Sub DownloadEditUpdate(Optional Latest As JObject = Nothing, Optional LatestName As String = Nothing)
+        RunInUi(Sub() Hint("正在下载新版本……", HintType.Blue))
+        Try
+            If Latest Is Nothing Then
+                Latest = GetEditLatestRelease()
+                If Latest Is Nothing Then Throw New Exception("无法获取最新版本信息")
+                LatestName = Latest("tag_name").ToString().TrimStart("v"c)
+            End If
+            If String.IsNullOrEmpty(LatestName) Then LatestName = VersionBaseName
+            If CompareEditVersion(LatestName, VersionBaseName) <= 0 Then
+                RunInUi(Sub() Hint("当前已是最新版本"))
+                Return
+            End If
+            '确定下载地址，优先 exe，其次 zip
+            Dim DownloadUrl As String = Nothing
+            Dim IsZip As Boolean = False
+            Dim Assets As JArray = TryCast(Latest("assets"), JArray)
+            If Assets IsNot Nothing Then
+                For Each Asset As JObject In Assets
+                    Dim AssetName As String = Asset("name").ToString().ToLower()
+                    If AssetName.EndsWith(".exe") Then
+                        DownloadUrl = Asset("browser_download_url").ToString()
+                        IsZip = False
+                        Exit For
+                    ElseIf AssetName.EndsWith(".zip") AndAlso DownloadUrl Is Nothing Then
+                        DownloadUrl = Asset("browser_download_url").ToString()
+                        IsZip = True
+                    End If
+                Next
+            End If
+            If DownloadUrl Is Nothing Then
+                '没有可用的附件，打开网页供手动下载
+                RunInUi(Sub() OpenWebsite(Latest("html_url").ToString()))
+                Return
+            End If
+            '下载
+            Dim UpdateFolder As String = PathTemp & "PCL-EDIT-Update\"
+            DirectoryUtils.Create(UpdateFolder)
+            Dim DownloadPath As String = UpdateFolder & If(IsZip, "Update.zip", "Update.exe")
+            NetDownloadByLoader(DownloadUrl, DownloadPath)
+            '获取新 exe 的路径
+            Dim NewExe As String = DownloadPath
+            If IsZip Then
+                Dim ExtractDir As String = UpdateFolder & "Extract\"
+                FileUtils.ExtractToDirectory(DownloadPath, ExtractDir)
+                FileUtils.Delete(DownloadPath)
+                Dim ExeFiles = Directory.GetFiles(ExtractDir, "*.exe", SearchOption.AllDirectories)
+                If Not ExeFiles.Any() Then Throw New Exception("下载的压缩包中不包含可执行文件")
+                NewExe = ExeFiles.OrderByDescending(Function(f) New FileInfo(f).Length).First()
+            End If
+            '启动替换流程：以 --update 参数启动新版本，由它完成文件替换与重启
+            IsUpdateWaitingRestart = True
+            Logger.Info($"开始更新：{NewExe} → {PathExe}")
+            StartProcess(NewExe, $"--update {Process.GetCurrentProcess().Id} ""{PathExe}"" ""{NewExe}"" True")
+            '结束当前程序，等待替换完成
+            IsUpdateWaitingRestart = False
+            RunInUi(Sub() FormMain.EndProgramForce(ProcessReturnValues.TaskDone))
+        Catch ex As Exception
+            ex.ThrowIfCanceled()
+            Logger.Error(ex, "下载更新失败")
+            RunInUi(Sub() Hint("下载更新失败：" & ex.Message, HintType.Red))
+        End Try
     End Sub
 
     Friend IsUpdateWaitingRestart As Boolean = False
+    ''' <summary>
+    ''' 重启 PCL。若 TriggerRestartAndByEnd 为真，则立即重启并结束当前程序。
+    ''' </summary>
     Public Sub UpdateRestart(TriggerRestartAndByEnd As Boolean)
+        IsUpdateWaitingRestart = False
+        Try
+            StartProcess(PathExe)
+        Catch ex As Exception
+            Logger.Error(ex, "重启 PCL 失败")
+            Return
+        End Try
+        If TriggerRestartAndByEnd Then
+            FormMain.EndProgramForce(ProcessReturnValues.TaskDone)
+        End If
     End Sub
+    ''' <summary>
+    ''' 以 --update 模式启动时，由新版本进程调用，用于替换旧版文件并重启。
+    ''' </summary>
     Public Sub UpdateReplace(ProcessId As Integer, OldFileName As String, NewFileName As String, TriggerRestart As Boolean)
+        Logger.Info($"更新替换：{NewFileName} → {OldFileName}")
+        '等待旧进程退出
+        Try
+            Dim OldProcess As Process = Process.GetProcessById(ProcessId)
+            If Not OldProcess.HasExited Then OldProcess.WaitForExit(30000)
+        Catch ex As Exception
+            Logger.Warn(ex, "等待旧进程退出失败，直接尝试替换")
+        End Try
+        '替换文件
+        Try
+            FileUtils.Copy(NewFileName, OldFileName)
+            Logger.Info("更新替换完成")
+        Catch ex As Exception
+            Logger.Error(ex, "更新替换失败")
+            Environment.Exit(ProcessReturnValues.Fail)
+        End Try
+        '清理更新用的临时文件
+        Try
+            Dim UpdateFolder As String = PathTemp & "PCL-EDIT-Update\"
+            If FileUtils.Exists(UpdateFolder) Then FileUtils.Delete(UpdateFolder, True)
+        Catch ex As Exception
+            Logger.Warn(ex, "清理更新临时文件失败")
+        End Try
+        If TriggerRestart Then
+            Try
+                StartProcess(OldFileName)
+            Catch ex As Exception
+                Logger.Error(ex, "更新后重启失败")
+            End Try
+        End If
     End Sub
 
     ''' <summary>
@@ -160,7 +385,37 @@ Friend Module ModSecret
     ''' 如果不是，则下载一个。
     ''' </summary>
     Friend Sub DownloadLatestPCL(Optional LoaderToSyncProgress As LoaderBase = Nothing)
-        '注意：如果要自行实现这个功能，请换用另一个文件路径，以免与官方版本冲突
+        '注意：使用了独立的文件路径，以免与官方版本冲突
+        Try
+            Dim Latest = GetEditLatestRelease()
+            If Latest Is Nothing Then Throw New Exception("无法获取 PCL-EDIT 的最新版本信息")
+            Dim DownloadUrl As String = Nothing
+            Dim Assets As JArray = TryCast(Latest("assets"), JArray)
+            If Assets IsNot Nothing Then
+                For Each Asset As JObject In Assets
+                    Dim AssetName As String = Asset("name").ToString().ToLower()
+                    If AssetName.EndsWith(".exe") OrElse AssetName.EndsWith(".zip") Then
+                        DownloadUrl = Asset("browser_download_url").ToString()
+                        Exit For
+                    End If
+                Next
+            End If
+            If DownloadUrl Is Nothing Then Throw New Exception("最新版本中没有可用的下载文件")
+            Dim IsZip As Boolean = DownloadUrl.ToLower().EndsWith(".zip")
+            Dim DownloadPath As String = PathTemp & If(IsZip, "Latest.zip", "Latest.exe")
+            NetDownloadByLoader(DownloadUrl, DownloadPath, LoaderToSyncProgress)
+            If IsZip Then
+                Dim ExtractDir As String = PathTemp & "Latest\"
+                FileUtils.ExtractToDirectory(DownloadPath, ExtractDir)
+                FileUtils.Delete(DownloadPath)
+                Dim ExeFiles = Directory.GetFiles(ExtractDir, "*.exe", SearchOption.AllDirectories)
+                If Not ExeFiles.Any() Then Throw New Exception("下载的压缩包中不包含可执行文件")
+                FileUtils.Copy(ExeFiles.OrderByDescending(Function(f) New FileInfo(f).Length).First(), PathTemp & "Latest.exe")
+            End If
+        Catch ex As Exception
+            Logger.Error(ex, "下载最新版 PCL 失败")
+            Throw
+        End Try
     End Sub
 
 #End Region
