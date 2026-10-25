@@ -246,6 +246,15 @@ Public Class PageResource
     Private Sub TextSearchVersion_TextChanged() Handles TextSearchVersion.TextChanged
         If Not TextSearchVersion.IsDropDownOpen Then UpdateSearchLoaderVisibility()
     End Sub
+    '类型筛选提示（#9555）
+    '切换类型后很容易忘记自己设了筛选条件，导致后来搜索不到本来有的内容，因此在筛选生效时明确提示一次
+    Private Sub ComboSearchTag_SelectionChanged(sender As Object, e As SelectionChangedEventArgs) Handles ComboSearchTag.SelectionChanged
+        If AniControlEnabled <> 0 Then Return
+        If ComboSearchTag.SelectedItem Is Nothing Then Return
+        Dim TagName As String = ComboSearchTag.SelectedItem.ToString
+        If String.IsNullOrWhiteSpace(TagName) OrElse TagName = "全部" Then Return
+        Hint($"已按“{TagName}”筛选{TypeName}，搜索不到内容时请检查“类型”筛选条件", HintType.Blue)
+    End Sub
     Private Sub UpdateSearchLoaderVisibility() Handles TextSearchVersion.DropDownClosed
         If PageType = ResourceTypes.Mod AndAlso (TextSearchVersion.Text.Contains(".") OrElse TextSearchVersion.Text.Contains("w")) Then
             ComboSearchLoader.Visibility = Visibility.Visible
