@@ -42,6 +42,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: 编译
+        id: build_vb
         shell: pwsh
         run: |
           $log = "${{ runner.temp }}\msbuild.log"
@@ -50,16 +51,12 @@ jobs:
             "-fileLogger" "-fileLoggerParameters:LogFile=$log;Verbosity=normal;Encoding=UTF-8"
           $code = $LASTEXITCODE
           if ($code -ne 0) {
-            $errors = Select-String -Path $log -Pattern ": error |: fatal error " | Select-Object -First 20
-            foreach ($e in $errors) {
-              # 以 ::error:: 形式输出，失败原因会直接显示在 Actions 摘要里
-              $line = $e.Line -replace "%", "%25" -replace "`r", "" -replace "`n", "%0A"
-              Write-Host "::error::$line"
-            }
-            Write-Host "===== 错误明细 ====="
-            Select-String -Path $log -Pattern ": error |: fatal error " | Select-Object -First 60 | ForEach-Object { Write-Host $_.Line }
-            Write-Host "===== 尾部日志 ====="
-            Get-Content $log -Tail 40
+            # 以 ::error:: 形式输出，失败原因会直接显示在 Actions 摘要里
+            Select-String -Path $log -Pattern ": error |: fatal error " |
+              Select-Object -First 20 | ForEach-Object {
+                $line = $_.Line -replace "%", "%25" -replace "`r", "" -replace "`n", "%0A"
+                Write-Host "::error::$line"
+              }
           }
           exit $code
 
