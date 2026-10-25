@@ -253,7 +253,8 @@ Public Class PageResource
         If ComboSearchTag.SelectedItem Is Nothing Then Return
         Dim TagName As String = ComboSearchTag.SelectedItem.ToString
         If String.IsNullOrWhiteSpace(TagName) OrElse TagName = "全部" Then Return
-        Hint($"已按“{TagName}”筛选{TypeName}，搜索不到内容时请检查“类型”筛选条件", HintType.Blue)
+        Dim FilterName As String = If(String.IsNullOrWhiteSpace(TypeName), "内容", TypeName)
+        Hint($"已按 [{TagName}] 筛选{FilterName}，搜索不到内容时请检查类型筛选条件", HintType.Blue)
     End Sub
     Private Sub UpdateSearchLoaderVisibility() Handles TextSearchVersion.DropDownClosed
         If PageType = ResourceTypes.Mod AndAlso (TextSearchVersion.Text.Contains(".") OrElse TextSearchVersion.Text.Contains("w")) Then
