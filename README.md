@@ -11,7 +11,7 @@ PCL-EDIT 是 [Plain Craft Launcher 2](https://github.com/Meloong-Git/PCL) 的第
 
 - 发布页：<https://github.com/hanqindylan/PCL-EDIT/releases>
 - 最新正式版：`3.0.0`
-- 每次推送到 `main` 后，GitHub Actions 会在 Windows 上编译 Release 与 Snapshot，Release 产物可在对应的 Actions 运行中下载。
+- 每次推送到 `main` 后，GitHub Actions 会在 Windows 上编译 Release 与 Snapshot，Release 产物可在对应的 Actions 运行中下载（见 [Actions](https://github.com/hanqindylan/PCL-EDIT/actions/workflows/build.yml)）。
 
 下载后解压即可使用。程序只支持 Windows，需要 [.NET Framework 4.8](https://dotnet.microsoft.com/download/dotnet-framework/net48)。
 
@@ -62,12 +62,14 @@ PCL-EDIT 是 [Plain Craft Launcher 2](https://github.com/Meloong-Git/PCL) 的第
 git clone --recurse-submodules https://github.com/hanqindylan/PCL-EDIT.git
 cd PCL-EDIT
 dotnet restore PCLCS\PCLCS.csproj
+# VB 工程是旧式 MSBuild 工程，不会自动编译它引用的 SDK 式 C# 工程，必须先单独编译
+dotnet build PCLCS\PCLCS.csproj -c Release
 msbuild "Plain Craft Launcher 2\Plain Craft Launcher 2.vbproj" -p:Configuration=Release -m
 ```
 
 产物位于 `Plain Craft Launcher 2\bin\Plain Craft Launcher 2.exe`。
 
-仓库提供 `.github/workflows/build.yml`。推送或手动触发后，会在 `windows-latest` 上分别编译 Release 与 Snapshot，并把 Release 的 `bin` 目录上传为 Artifact。
+仓库提供 `.github/workflows/build.yml`，当前编译状态为通过：推送或手动触发后，会在 `windows-latest` 上分别编译 Release 与 Snapshot，并把 Release 的 `bin` 目录上传为 Artifact。编译失败时，错误行会以注解形式直接显示在 Actions 运行页面上。
 
 ## 协议
 
