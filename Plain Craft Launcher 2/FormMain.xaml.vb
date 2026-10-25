@@ -1075,7 +1075,7 @@ Public Class FormMain
                 Dim NameOffset = 4 + Index * DescriptorSize + 72
                 If NameOffset + 520 > DescriptorBytes.Length Then Exit For
                 Dim FileName = Text.Encoding.Unicode.GetString(DescriptorBytes, NameOffset, 520).TrimEnd(ChrW(0))
-                FileName = PathUtils.GetFileName(FileName.Replace("/", "\")) '描述符中可能带有相对路径
+                FileName = PathUtils.GetLastPart(FileName.Replace("/", "\")) '描述符中可能带有相对路径
                 If String.IsNullOrWhiteSpace(FileName) Then Continue For
                 '按索引取出第 Index 个文件的内容
                 Dim Format As New Runtime.InteropServices.ComTypes.FORMATETC With {

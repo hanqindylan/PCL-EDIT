@@ -378,6 +378,7 @@ GroupDone:
     Public Shared CachedFolder As New Dictionary(Of String, String) '仅在本次缓存的下载文件夹
     Public Sub Save_Click(sender As Object, e As EventArgs)
         Dim File As ResourceVersion = If(TypeOf sender Is MyListItem, sender, sender.Parent).Tag
+        Dim CacheKey As String = Nothing '下载文件夹缓存键，在下面按资源类型、加载器与 MC 版本生成（#9536）
         RunInNewThread(
         Sub()
             Try
@@ -451,7 +452,8 @@ GroupDone:
                         Return AllowedLoaders = ModLoaders.None OrElse AllowedLoaders.Flags.Intersect(Instance.Version.ModLoaders.Flags).Any
                     End Function
                     '获取常规资源默认下载位置
-                    Dim CacheKey As String = $"{CInt(File.ResourceType)}|{CInt(AllowedLoaders)}|{String.Join(",", File.GameVersions.OrderBy(Function(v) v))}"
+                    '缓存键放在方法作用域，下载完成后要用它记住用户选过的文件夹（#9536）
+                    CacheKey = $"{CInt(File.ResourceType)}|{CInt(AllowedLoaders)}|{String.Join(",", File.GameVersions.OrderBy(Function(v) v))}"
                     If CachedFolder.ContainsKey(CacheKey) Then
                         DefaultFolder = CachedFolder(CacheKey)
                         Logger.Info($"使用上次下载时的文件夹作为默认下载位置：{DefaultFolder}")

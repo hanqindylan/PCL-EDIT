@@ -15,13 +15,17 @@ Public Class PageLaunchRight
         If Not HomepageRefreshHooked Then
             HomepageRefreshHooked = True
             AddHandler McLoginLoader.LoadingStateChanged, AddressOf RefreshHomepageOnReady
+            AddHandler McInstanceListLoader.LoadingStateChanged, AddressOf RefreshHomepageOnReady
         End If
     End Sub
     ''' <summary>
-    ''' 登录完成或当前版本变化后重新替换主页标记（#9343）。
+    ''' 登录完成或版本列表完成后重新替换主页标记（#9343）。
+    ''' 签名需与 LoadingStateChanged(NewState, OldState) 一致。
     ''' </summary>
-    Private Sub RefreshHomepageOnReady(Loader As LoaderBase)
-        If Loader.State <> LoadState.Finished Then Return
+    Private Sub RefreshHomepageOnReady(NewState As MyLoading.MyLoadingState, OldState As MyLoading.MyLoadingState)
+        '事件参数是 MyLoading 的状态枚举，与 LoaderBase.State 的 LoadState 不是同一套，因此直接读取加载器状态
+        If McLoginLoader.State <> LoadState.Finished Then Return
+        If McInstanceListLoader.State <> LoadState.Finished Then Return
         RunInUi(Sub()
                     LoadedContentHash = Nothing '登录信息变化后，原先替换出的内容已经过期
                     Refresh()
