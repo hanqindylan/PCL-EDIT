@@ -78,3 +78,64 @@ jobs:
           name: PCL2-Release
           path: Plain Craft Launcher 2\bin
           if-no-files-found: error
+
+  # 用编译好的 Release 产物打出自包含的中文安装程序（不需要选语言，双击即装）
+  installer:
+    name: 打包安装程序
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v6
+
+      - name: 下载 Release 产物
+        uses: actions/download-artifact@v5
+        with:
+          name: PCL2-Release
+          path: payload
+
+      - name: 打包安装包内容
+        shell: pwsh
+        run: |
+          # 把 PCL 的 bin 内容压进 payload.zip，供安装器内嵌
+          New-Item -ItemType Directory -Force -Path "PCLInstaller\Payload" | Out-Null
+          Compress-Archive -Path "payload\*" -DestinationPath "PCLInstaller\Payload\payload.zip" -CompressionLevel Optimal
+          Get-Item "PCLInstaller\Payload\payload.zip" | Select-Object Name, Length | Format-Table -AutoSize
+
+      - name: 编译安装程序
+        shell: pwsh
+        run: |
+          $log = "${{ runner.temp }}\installer.log"
+          dotnet build "PCLInstaller\PCLInstaller.csproj" -c Release -v:normal `
+            "-filelogger" "-fileloggerparameters:LogFile=$log;Verbosity=normal;Encoding=UTF-8"
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            Select-String -Path $log -Pattern ": error |: fatal error " |
+              Select-Object -First 20 | ForEach-Object {
+                $line = $_.Line -replace "%", "%25" -replace "`r", "" -replace "`n", "%0A"
+                Write-Host "::error::$line"
+              }
+          }
+          exit $code
+
+      - name: 检查安装程序
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem "PCLInstaller\bin" -Filter "*.exe" -Recurse |
+                   Where-Object { $_.Name -like "*安装程序*" } | Select-Object -First 1
+          if (-not $exe) { Write-Error "未找到安装程序 exe"; exit 1 }
+          Write-Host "安装程序：$($exe.FullName)"
+          Write-Host ("大小：{0:N2} MB" -f ($exe.Length / 1MB))
+          if ($exe.Length -lt 1MB) { Write-Error "安装程序体积异常，内嵌内容可能未打包"; exit 1 }
+          # 统一改名为便于识别的发布文件名
+          $out = Join-Path "${{ runner.temp }}" "PCL-EDIT-3.0.0-安装程序.exe"
+          Copy-Item $exe.FullName $out
+          echo "setup_path=$out" >> $env:GITHUB_OUTPUT
+        id: setup
+
+      - name: 上传安装程序
+        uses: actions/upload-artifact@v7
+        with:
+          name: PCL-EDIT-安装程序
+          path: ${{ runner.temp }}/PCL-EDIT-3.0.0-安装程序.exe
+          if-no-files-found: error

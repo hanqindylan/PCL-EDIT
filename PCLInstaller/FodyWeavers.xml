@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Weavers>
+  <!-- 把依赖程序集一起塞进 exe，安装程序保持单文件 -->
+  <Costura />
+</Weavers>

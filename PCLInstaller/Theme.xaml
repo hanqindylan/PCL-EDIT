@@ -1,0 +1,52 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- 色板直接取自 PCL 本体的 Application.xaml，保证观感一致 -->
+    <SolidColorBrush x:Key="ColorBrush1" Color="#343d4a" />
+    <SolidColorBrush x:Key="ColorBrush2" Color="#0b5bcb" />
+    <SolidColorBrush x:Key="ColorBrush3" Color="#1370f3" />
+    <SolidColorBrush x:Key="ColorBrush4" Color="#4890f5" />
+    <SolidColorBrush x:Key="ColorBrush5" Color="#96c0f9" />
+    <SolidColorBrush x:Key="ColorBrush6" Color="#d5e6fd" />
+    <SolidColorBrush x:Key="ColorBrush7" Color="#e0eafd" />
+    <SolidColorBrush x:Key="ColorBrush8" Color="#eaf2fe" />
+
+    <SolidColorBrush x:Key="Gray1" Color="#404040" />
+    <SolidColorBrush x:Key="Gray2" Color="#737373" />
+    <SolidColorBrush x:Key="Gray3" Color="#8c8c8c" />
+    <SolidColorBrush x:Key="Gray4" Color="#a6a6a6" />
+    <SolidColorBrush x:Key="Gray5" Color="#cccccc" />
+    <SolidColorBrush x:Key="Gray6" Color="#ebebeb" />
+    <SolidColorBrush x:Key="Gray7" Color="#f0f0f0" />
+    <SolidColorBrush x:Key="Gray8" Color="#f5f5f5" />
+
+    <SolidColorBrush x:Key="White" Color="#ffffff" />
+    <SolidColorBrush x:Key="Dangerous" Color="#d83b3b" />
+    <SolidColorBrush x:Key="Success" Color="#26a852" />
+
+    <!-- 主色渐变：用于主按钮 -->
+    <LinearGradientBrush x:Key="PrimaryGradient" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#2a84f7" Offset="0" />
+        <GradientStop Color="#0b5bcb" Offset="1" />
+    </LinearGradientBrush>
+
+    <LinearGradientBrush x:Key="PrimaryGradientHover" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#3f92f9" Offset="0" />
+        <GradientStop Color="#1268d8" Offset="1" />
+    </LinearGradientBrush>
+
+    <LinearGradientBrush x:Key="PrimaryGradientDown" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#0b5bcb" Offset="0" />
+        <GradientStop Color="#0a4fae" Offset="1" />
+    </LinearGradientBrush>
+
+    <!-- 背景：淡蓝到白的柔和渐变 -->
+    <LinearGradientBrush x:Key="WindowBack" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#eaf2fe" Offset="0" />
+        <GradientStop Color="#f7fafe" Offset="0.55" />
+        <GradientStop Color="#ffffff" Offset="1" />
+    </LinearGradientBrush>
+
+    <FontFamily x:Key="AppFont">Microsoft YaHei UI, Microsoft YaHei, 微软雅黑</FontFamily>
+
+</ResourceDictionary>

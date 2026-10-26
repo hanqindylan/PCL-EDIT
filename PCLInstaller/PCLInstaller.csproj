@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    PCL-EDIT 安装器。
+    与 PCL 本体保持一致的技术栈（WPF + .NET Framework 4.8），
+    这样可以直接复用 PCL 的配色、圆角卡片与字体，观感就是 PCL 自己的一部分。
+    WPF 只能在 Windows 上编译，因此这里同样交给 GitHub Actions 处理。
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>PCLInstaller</RootNamespace>
+    <AssemblyName>PCL-EDIT 安装程序</AssemblyName>
+    <ApplicationIcon>icon.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <LangVersion>latest</LangVersion>
+    <Deterministic>true</Deterministic>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <Version>3.0.0</Version>
+    <AssemblyTitle>Plain Craft Launcher 2 修改版 安装程序</AssemblyTitle>
+    <Product>PCL-EDIT</Product>
+    <Company>PCL-EDIT</Company>
+    <Copyright>基于 Plain Craft Launcher 2（作者：龙腾猫跃）</Copyright>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Costura.Fody" Version="5.7.0" PrivateAssets="all" />
+    <PackageReference Include="Fody" Version="6.8.1" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!--
+    安装包内容：CI 在编译完 PCL 之后，把 bin 目录压缩成 payload.zip
+    放进 Payload\ 下，再编译本工程。这样安装器就是一个自包含的单文件 exe。
+  -->
+  <ItemGroup Condition="Exists('Payload\payload.zip')">
+    <EmbeddedResource Include="Payload\payload.zip" LogicalName="PCLInstaller.payload.zip" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="icon.ico" />
+  </ItemGroup>
+
+</Project>

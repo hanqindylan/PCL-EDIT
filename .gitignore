@@ -342,3 +342,6 @@ ASALocalRun/
 healthchecksdb
 
 MaskFiles/
+
+# 安装器的内嵌内容（由 CI 生成）
+PCLInstaller/Payload/
