@@ -89,7 +89,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: 下载 Release 产物
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           name: PCL2-Release
           path: payload

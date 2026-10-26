@@ -14,29 +14,33 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Grid>
-                        <Border x:Name="Bd" CornerRadius="8" Background="{StaticResource PrimaryGradient}">
-                            <Border.Effect>
-                                <DropShadowEffect x:Name="Sh" Color="#0b5bcb" BlurRadius="16"
-                                                  ShadowDepth="3" Opacity="0.30" />
-                            </Border.Effect>
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
-                                              Margin="{TemplateBinding Padding}" />
-                        </Border>
-                    </Grid>
+                    <Border x:Name="Bd" CornerRadius="8" Background="{StaticResource PrimaryGradient}">
+                        <Border.Effect>
+                            <DropShadowEffect Color="#0b5bcb" BlurRadius="16" ShadowDepth="3" Opacity="0.30" />
+                        </Border.Effect>
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          Margin="{TemplateBinding Padding}" />
+                    </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Bd" Property="Background" Value="{StaticResource PrimaryGradientHover}" />
-                            <Setter TargetName="Sh" Property="Opacity" Value="0.45" />
-                            <Setter TargetName="Sh" Property="BlurRadius" Value="22" />
+                            <Setter TargetName="Bd" Property="Effect">
+                                <Setter.Value>
+                                    <DropShadowEffect Color="#0b5bcb" BlurRadius="22" ShadowDepth="4" Opacity="0.45" />
+                                </Setter.Value>
+                            </Setter>
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="Bd" Property="Background" Value="{StaticResource PrimaryGradientDown}" />
-                            <Setter TargetName="Sh" Property="Opacity" Value="0.2" />
+                            <Setter TargetName="Bd" Property="Effect">
+                                <Setter.Value>
+                                    <DropShadowEffect Color="#0b5bcb" BlurRadius="10" ShadowDepth="1" Opacity="0.20" />
+                                </Setter.Value>
+                            </Setter>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="Bd" Property="Background" Value="{StaticResource Gray5}" />
-                            <Setter TargetName="Sh" Property="Opacity" Value="0" />
+                            <Setter TargetName="Bd" Property="Effect" Value="{x:Null}" />
                             <Setter Property="Foreground" Value="{StaticResource Gray3}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
