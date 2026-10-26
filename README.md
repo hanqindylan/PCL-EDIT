@@ -13,7 +13,35 @@ PCL-EDIT 是 [Plain Craft Launcher 2](https://github.com/Meloong-Git/PCL) 的第
 - 最新正式版：`3.0.0`
 - 每次推送到 `main` 后，GitHub Actions 会在 Windows 上编译 Release 与 Snapshot，Release 产物可在对应的 Actions 运行中下载（见 [Actions](https://github.com/hanqindylan/PCL-EDIT/actions/workflows/build.yml)）。
 
+### 安装程序（推荐）
+
+Actions 每次都会额外产出 `PCL-EDIT-安装程序`（约 3.4 MB）。它是**单个 exe，双击即可安装，全程中文，没有任何语言选择界面**：
+
+1. 欢迎页 → 点击「下一步」
+2. 确认安装位置与快捷方式 → 点击「开始安装」
+3. 自动解压、创建快捷方式、注册卸载信息 → 完成
+
+- 默认装到 `%LOCALAPPDATA%\PCL-EDIT`，**不需要管理员权限**，也不会触发 UAC。
+- 可选装到自定义文件夹、选择是否创建桌面快捷方式、安装完是否立即启动。
+- 安装后出现在「设置 → 应用 → 已安装的应用」里，可以正常卸载；卸载会保留存档、Mod 与配置文件。
+
+### 免安装
+
+也可以直接下载 `PCL2-Release`，解压后运行 `Plain Craft Launcher 2.exe`。
+
 下载后解压即可使用。程序只支持 Windows，需要 [.NET Framework 4.8](https://dotnet.microsoft.com/download/dotnet-framework/net48)。
+
+## 安装器界面
+
+安装器用 WPF 自绘，配色与圆角直接取自 PCL 本体（`#343d4a` 深灰文字、`#0b5bcb`→`#1370f3` 蓝渐变），观感与启动器一致。源码在 `PCLInstaller/`。
+
+| 页面 | 说明 |
+| --- | --- |
+| 欢迎 | 展示版本与核心特性，下一步即可 |
+| 选项 | 选安装位置（默认当前用户 / 自定义文件夹）、桌面快捷方式、安装后启动 |
+| 进度 | 细长圆角进度条 + 实时中文日志 |
+| 完成 | 显示安装路径，可直接启动 |
+| 失败 | 显示中文错误原因与完整技术日志 |
 
 ## 本版本做了什么
 
@@ -69,7 +97,21 @@ msbuild "Plain Craft Launcher 2\Plain Craft Launcher 2.vbproj" -p:Configuration=
 
 产物位于 `Plain Craft Launcher 2\bin\Plain Craft Launcher 2.exe`。
 
-仓库提供 `.github/workflows/build.yml`，当前编译状态为通过：推送或手动触发后，会在 `windows-latest` 上分别编译 Release 与 Snapshot，并把 Release 的 `bin` 目录上传为 Artifact。编译失败时，错误行会以注解形式直接显示在 Actions 运行页面上。
+要连安装程序一起打出来，先把 `bin` 的内容压成 `PCLInstaller\Payload\payload.zip`，再编译安装器：
+
+```powershell
+New-Item -ItemType Directory -Force PCLInstaller\Payload
+Compress-Archive -Path "Plain Craft Launcher 2\bin\*" -DestinationPath PCLInstaller\Payload\payload.zip
+dotnet build PCLInstaller\PCLInstaller.csproj -c Release
+```
+
+产物位于 `PCLInstaller\bin\Release\net48\PCL-EDIT 安装程序.exe`。程序文件以资源形式内嵌，所以这**一个 exe** 就是完整安装包。
+
+仓库提供 `.github/workflows/build.yml`，当前编译状态为通过。它分两个任务：
+1. `build` —— 在 `windows-latest` 上分别编译 Release 与 Snapshot，上传 Release 的 `bin` 为 Artifact。
+2. `installer` —— 下载上一步的产物，压成 `payload.zip` 后编译安装器，上传 `PCL-EDIT-安装程序`。
+
+编译失败时，错误行会以注解形式直接显示在 Actions 运行页面上。
 
 ## 协议
 
