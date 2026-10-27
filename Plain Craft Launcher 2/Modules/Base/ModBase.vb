@@ -17,16 +17,16 @@ Public Module ModBase
     ''' <summary>
     ''' 构建目标架构，用于在界面与日志中区分 x86 / x64 / ARM64 三个分发包。
     ''' ARM64 包受限于 .NET Framework 的 WPF 没有 ARM64 编译目标，实际以 32 位模拟方式运行。
+    ''' 注意：VB 的 Const 不能用 #If 块给同一个常量赋不同值，必须在每个分支里各自声明一次。
     ''' </summary>
-    Public Const BuildArchitecture As String =
 #If X86_BUILD Then
-        "x86"
+    Public Const BuildArchitecture As String = "x86"
 #ElseIf X64_BUILD Then
-        "x64"
+    Public Const BuildArchitecture As String = "x64"
 #ElseIf ARM64_BUILD Then
-        "ARM64"
+    Public Const BuildArchitecture As String = "ARM64"
 #Else
-        "AnyCPU"
+    Public Const BuildArchitecture As String = "AnyCPU"
 #End If
     ''' <summary>
     ''' 架构是否参与显示：三个分发包才显示，开发时用 AnyCPU 不显示。
