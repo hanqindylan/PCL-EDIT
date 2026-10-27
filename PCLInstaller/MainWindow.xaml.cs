@@ -35,7 +35,7 @@ namespace PCLInstaller
 
             if (_uninstallMode)
             {
-                LabCaption.Text = "PCL-EDIT 卸载程序";
+                LabCaption.Text = "PCL 3 卸载程序";
                 BtnNext.Content = "开始卸载";
                 ChkLaunch.Visibility = Visibility.Collapsed;
                 ChkLaunch.IsChecked = false;
@@ -61,7 +61,7 @@ namespace PCLInstaller
             // 安装进行中不允许关闭，避免留下半个目录
             if (_step == 2)
             {
-                if (MessageBox.Show("安装正在进行，确定要退出吗？\n退出可能导致安装不完整。", "PCL-EDIT 安装程序",
+                if (MessageBox.Show("安装正在进行，确定要退出吗？\n退出可能导致安装不完整。", "PCL 3 安装程序",
                         MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
             }
             Close();
@@ -278,14 +278,14 @@ namespace PCLInstaller
             if (ChkDesktop.IsChecked == true)
             {
                 var desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-                ShortcutHelper.Create(Path.Combine(desktop, "PCL-EDIT.lnk"), exe, dir, "Plain Craft Launcher 2 修改版");
+                ShortcutHelper.Create(Path.Combine(desktop, "PCL 3.lnk"), exe, dir, "PCL 3（Hanqinchen）");
             }
 
             var programs = Environment.GetFolderPath(Environment.SpecialFolder.Programs);
             var menuDir = Path.Combine(programs, "PCL-EDIT");
             Directory.CreateDirectory(menuDir);
-            ShortcutHelper.Create(Path.Combine(menuDir, "PCL-EDIT.lnk"), exe, dir, "Plain Craft Launcher 2 修改版");
-            ShortcutHelper.Create(Path.Combine(menuDir, "卸载 PCL-EDIT.lnk"),
+            ShortcutHelper.Create(Path.Combine(menuDir, "PCL 3.lnk"), exe, dir, "PCL 3（Hanqinchen）");
+            ShortcutHelper.Create(Path.Combine(menuDir, "卸载 PCL 3.lnk"),
                 Path.Combine(dir, "PCL-EDIT 安装程序.exe"), dir, "卸载 PCL-EDIT");
         }
 
@@ -302,9 +302,9 @@ namespace PCLInstaller
             using (var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(
                        @"Software\Microsoft\Windows\CurrentVersion\Uninstall\PCL-EDIT"))
             {
-                key.SetValue("DisplayName", "PCL-EDIT（Plain Craft Launcher 2 修改版）");
+                key.SetValue("DisplayName", "PCL 3（Plain Craft Launcher 2 修改版，Hanqinchen 制作）");
                 key.SetValue("DisplayVersion", "3.0.0");
-                key.SetValue("Publisher", "PCL-EDIT");
+                key.SetValue("Publisher", "Hanqinchen");
                 key.SetValue("InstallLocation", dir);
                 key.SetValue("DisplayIcon", Path.Combine(dir, "Plain Craft Launcher 2.exe"));
                 key.SetValue("UninstallString", $"\"{uninstaller}\"");
@@ -322,7 +322,7 @@ namespace PCLInstaller
             var dir = TargetDir;
             try
             {
-                SetProgress(5, "正在卸载……", "正在关闭 PCL-EDIT");
+                SetProgress(5, "正在卸载……", "正在关闭 PCL 3");
                 await Task.Run(() =>
                 {
                     foreach (var p in Process.GetProcessesByName("Plain Craft Launcher 2"))
@@ -334,8 +334,8 @@ namespace PCLInstaller
                 SetProgress(25, "正在卸载……", "正在删除快捷方式");
                 await Task.Run(() =>
                 {
-                    TryDelete(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "PCL-EDIT.lnk"));
-                    TryDelete(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "PCL-EDIT", "PCL-EDIT.lnk"));
+                    TryDelete(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "PCL 3.lnk"));
+                    TryDelete(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "PCL-EDIT", "PCL 3.lnk"));
                 });
 
                 SetProgress(60, "正在卸载……", "正在删除程序文件");
@@ -352,7 +352,7 @@ namespace PCLInstaller
                     catch { /* 键不存在时忽略 */ }
                 });
 
-                SetProgress(100, "卸载完成", "PCL-EDIT 已从本机移除");
+                SetProgress(100, "卸载完成", "PCL 3 已从本机移除");
                 LabDoneDetail.Text = "已保留你的存档、Mod 与配置文件。\n如需彻底清理，请手动删除安装文件夹。";
                 ShowStep(3);
             }

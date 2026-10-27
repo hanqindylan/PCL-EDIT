@@ -1,8 +1,14 @@
 name: Build
 
 # 在 Windows 上编译验证整个项目（VB.NET + WPF + .NET Framework 4.8）。
-# WPF 仅支持 Windows，本工作流用于解决在 macOS 上无法本地编译验证的问题：
-# 每次推送或 PR 都会自动编译，可从 Artifact 下载可运行的 PCL2。
+# WPF 仅支持 Windows，本工作流用于解决在 macOS 上无法本地编译验证的问题。
+#
+# 三平台架构（x86 / x64 / ARM64）：
+#   x86   —— 32 位原生，兼容性与性能最稳，推荐给多数用户
+#   x64   —— 64 位原生，适合大内存与 64 位 Mod
+#   ARM64 —— 面向 Windows on ARM。受限于 .NET Framework 4.8 的 WPF 没有 ARM64 编译目标，
+#            此包为 AnyCPU + 32 位首选，在 ARM64 Windows 上由系统以 ARM64 模拟 x86 方式运行，
+#            这样 Windows 10 ARM 与 Windows 11 ARM 都能启动（Win10 ARM 无 x64 模拟层）。
 on:
   push:
     branches: ['**']
@@ -10,14 +16,22 @@ on:
   workflow_dispatch:
 
 jobs:
+  # ---------- 三平台 × 双配置编译 ----------
   build:
-    name: 编译（${{ matrix.configuration }}）
+    name: 编译（${{ matrix.configuration }} / ${{ matrix.platform }}）
     runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
         # Release 为发布配置；Snapshot 为快照配置（两者仅编译常量不同）
         configuration: [Release, Snapshot]
+        platform: [x86, x64, ARM64]
+        exclude:
+          # 快照版只需要在 x64 上做一次编译验证，避免 6 次构建拖慢反馈
+          - configuration: Snapshot
+            platform: x86
+          - configuration: Snapshot
+            platform: ARM64
     steps:
       - name: 检出代码（含 MeloongCore 子模块）
         uses: actions/checkout@v6
@@ -45,9 +59,10 @@ jobs:
         id: build_vb
         shell: pwsh
         run: |
-          $log = "${{ runner.temp }}\msbuild.log"
+          $log = "${{ runner.temp }}\msbuild-${{ matrix.platform }}.log"
           msbuild "Plain Craft Launcher 2\Plain Craft Launcher 2.vbproj" `
-            -p:Configuration=${{ matrix.configuration }} -m -verbosity:normal `
+            -p:Configuration=${{ matrix.configuration }} `
+            -p:Platform=${{ matrix.platform }} -m -verbosity:normal `
             "-fileLogger" "-fileLoggerParameters:LogFile=$log;Verbosity=normal;Encoding=UTF-8"
           $code = $LASTEXITCODE
           if ($code -ne 0) {
@@ -63,41 +78,58 @@ jobs:
       - name: 检查编译产物
         shell: pwsh
         run: |
-          Get-ChildItem "Plain Craft Launcher 2\bin" -ErrorAction SilentlyContinue | Select-Object Name, Length | Format-Table -AutoSize
-          $exe = "Plain Craft Launcher 2\bin\Plain Craft Launcher 2.exe"
+          $dir = "Plain Craft Launcher 2\bin\${{ matrix.platform }}"
+          Get-ChildItem $dir -ErrorAction SilentlyContinue |
+            Select-Object Name, Length | Format-Table -AutoSize
+          $exe = Join-Path $dir "Plain Craft Launcher 2.exe"
           if (-not (Test-Path $exe)) {
             Write-Error "未找到编译产物：$exe"
             exit 1
           }
           Write-Host "编译成功：$exe"
+          # 打印 PE 头里的机器类型，确认架构标签与实际产物一致
+          $bytes = [System.IO.File]::ReadAllBytes($exe)
+          $peOffset = [BitConverter]::ToInt32($bytes, 0x3C)
+          $machine = [BitConverter]::ToUInt16($bytes, $peOffset + 4)
+          $arch = switch ($machine) {
+            0x014c { "x86" }
+            0x8664 { "x64" }
+            0xAA64 { "ARM64" }
+            default { "0x{0:X4}" -f $machine }
+          }
+          Write-Host "产物架构：$arch（期望 ${{ matrix.platform }}）"
 
       - name: 上传编译产物
         if: matrix.configuration == 'Release'
         uses: actions/upload-artifact@v7
         with:
-          name: PCL2-Release
-          path: Plain Craft Launcher 2\bin
+          name: PCL-${{ matrix.platform }}
+          path: Plain Craft Launcher 2\bin\${{ matrix.platform }}
           if-no-files-found: error
 
-  # 用编译好的 Release 产物打出自包含的中文安装程序（不需要选语言，双击即装）
+  # ---------- 三平台安装程序（自包含，双击即装，全中文无语言选择） ----------
   installer:
-    name: 打包安装程序
+    name: 打包安装程序（${{ matrix.platform }}）
     needs: build
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [x86, x64, ARM64]
     steps:
       - name: 检出代码
         uses: actions/checkout@v6
 
-      - name: 下载 Release 产物
+      - name: 下载对应架构的产物
         uses: actions/download-artifact@v6
         with:
-          name: PCL2-Release
+          name: PCL-${{ matrix.platform }}
           path: payload
 
       - name: 打包安装包内容
         shell: pwsh
         run: |
-          # 把 PCL 的 bin 内容压进 payload.zip，供安装器内嵌
+          # 把 PCL 的产物压进 payload.zip，供安装器内嵌
           New-Item -ItemType Directory -Force -Path "PCLInstaller\Payload" | Out-Null
           Compress-Archive -Path "payload\*" -DestinationPath "PCLInstaller\Payload\payload.zip" -CompressionLevel Optimal
           Get-Item "PCLInstaller\Payload\payload.zip" | Select-Object Name, Length | Format-Table -AutoSize
@@ -105,9 +137,9 @@ jobs:
       - name: 编译安装程序
         shell: pwsh
         run: |
-          $log = "${{ runner.temp }}\installer.log"
-          dotnet build "PCLInstaller\PCLInstaller.csproj" -c Release -v:normal `
-            "-filelogger" "-fileloggerparameters:LogFile=$log;Verbosity=normal;Encoding=UTF-8"
+          $log = "${{ runner.temp }}\installer-${{ matrix.platform }}.log"
+          dotnet build "PCLInstaller\PCLInstaller.csproj" -c Release -p:Platform=${{ matrix.platform }} `
+            -v:normal "-filelogger" "-fileloggerparameters:LogFile=$log;Verbosity=normal;Encoding=UTF-8"
           $code = $LASTEXITCODE
           if ($code -ne 0) {
             Select-String -Path $log -Pattern ": error |: fatal error " |
@@ -121,21 +153,20 @@ jobs:
       - name: 检查安装程序
         shell: pwsh
         run: |
-          $exe = Get-ChildItem "PCLInstaller\bin" -Filter "*.exe" -Recurse |
+          $dir = "PCLInstaller\bin\${{ matrix.platform }}"
+          $exe = Get-ChildItem $dir -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue |
                    Where-Object { $_.Name -like "*安装程序*" } | Select-Object -First 1
-          if (-not $exe) { Write-Error "未找到安装程序 exe"; exit 1 }
+          if (-not $exe) { Write-Error "未找到安装程序 exe：$dir"; exit 1 }
           Write-Host "安装程序：$($exe.FullName)"
           Write-Host ("大小：{0:N2} MB" -f ($exe.Length / 1MB))
           if ($exe.Length -lt 1MB) { Write-Error "安装程序体积异常，内嵌内容可能未打包"; exit 1 }
-          # 统一改名为便于识别的发布文件名
-          $out = Join-Path "${{ runner.temp }}" "PCL-EDIT-3.0.0-安装程序.exe"
+          $out = Join-Path "${{ runner.temp }}" "PCL-EDIT-3.0.0-${{ matrix.platform }}-安装程序.exe"
           Copy-Item $exe.FullName $out
-          echo "setup_path=$out" >> $env:GITHUB_OUTPUT
-        id: setup
+          Write-Host "输出：$out"
 
       - name: 上传安装程序
         uses: actions/upload-artifact@v7
         with:
-          name: PCL-EDIT-安装程序
-          path: ${{ runner.temp }}/PCL-EDIT-3.0.0-安装程序.exe
+          name: PCL-EDIT-安装程序-${{ matrix.platform }}
+          path: ${{ runner.temp }}/PCL-EDIT-3.0.0-${{ matrix.platform }}-安装程序.exe
           if-no-files-found: error

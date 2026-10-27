@@ -14,6 +14,25 @@ Public Module ModBase
     Public Const VersionCode As Integer = 418 '快照版
 #End If
 
+    ''' <summary>
+    ''' 构建目标架构，用于在界面与日志中区分 x86 / x64 / ARM64 三个分发包。
+    ''' ARM64 包受限于 .NET Framework 的 WPF 没有 ARM64 编译目标，实际以 32 位模拟方式运行。
+    ''' </summary>
+    Public Const BuildArchitecture As String =
+#If X86_BUILD Then
+        "x86"
+#ElseIf X64_BUILD Then
+        "x64"
+#ElseIf ARM64_BUILD Then
+        "ARM64"
+#Else
+        "AnyCPU"
+#End If
+    ''' <summary>
+    ''' 架构是否参与显示：三个分发包才显示，开发时用 AnyCPU 不显示。
+    ''' </summary>
+    Public ReadOnly BuildArchitectureDisplay As String = If(BuildArchitecture = "AnyCPU", "", " " & BuildArchitecture)
+
     '版本信息
     Public Const VersionDisplay As String = BuildTypeDisplay & " " & VersionBaseName
 #If DEBUG Then

@@ -4,7 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="PCL-EDIT 安装程序"
+        Title="PCL 3 安装程序"
         Width="760" Height="540"
         WindowStyle="None" AllowsTransparency="True" Background="{x:Null}"
         ResizeMode="NoResize" WindowStartupLocation="CenterScreen"
@@ -44,7 +44,7 @@
                     </Border>
 
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock x:Name="LabCaption" Text="PCL-EDIT 安装程序"
+                        <TextBlock x:Name="LabCaption" Text="PCL 3 安装程序"
                                    FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource ColorBrush1}" />
                         <TextBlock x:Name="LabVersion" Text=" 3.0.0" FontSize="12.5"
                                    Foreground="{StaticResource Gray3}" VerticalAlignment="Center" />
@@ -70,10 +70,10 @@
                                            HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>
 
-                            <TextBlock Text="即将安装 PCL-EDIT" FontSize="25" FontWeight="Bold"
+                            <TextBlock Text="即将安装 PCL 3" FontSize="25" FontWeight="Bold"
                                        Foreground="{StaticResource ColorBrush1}"
                                        HorizontalAlignment="Center" Margin="0,26,0,0" />
-                            <TextBlock Text="Plain Craft Launcher 2 的第三方修改版"
+                            <TextBlock Text="由 Hanqinchen 制作，基于 Plain Craft Launcher 2"
                                        FontSize="13.5" Foreground="{StaticResource Gray2}"
                                        HorizontalAlignment="Center" Margin="0,8,0,0" />
 
@@ -150,7 +150,7 @@
                             <StackPanel Margin="2,14,0,0">
                                 <CheckBox x:Name="ChkDesktop" Content="创建桌面快捷方式" IsChecked="True"
                                           FontSize="13" Foreground="{StaticResource Gray1}" Margin="0,0,0,10" />
-                                <CheckBox x:Name="ChkLaunch" Content="安装完成后立即启动 PCL-EDIT"
+                                <CheckBox x:Name="ChkLaunch" Content="安装完成后立即启动 PCL 3"
                                           IsChecked="True" FontSize="13" Foreground="{StaticResource Gray1}" />
                             </StackPanel>
                         </StackPanel>
